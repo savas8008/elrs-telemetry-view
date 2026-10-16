@@ -25,7 +25,7 @@ Ev noktası, uydu sayısı 6 ve üzeri olan ilk GPS verisinde otomatik alınır;
 ### A) GitHub Actions (bilgisayarda bir şey kurmadan)
 1. Bu klasörü yeni bir GitHub deposuna yükleyin.
 2. **Actions** sekmesinde "APK derle" iş akışı çalışır (ya da elle *Run workflow*).
-3. Bitince sayfanın altındaki **ELRS-Telemetri-apk** dosyasını indirin, zip'ten `app-debug.apk` çıkar.
+3. Bitince deponun **Releases** bölümünden (sağ tarafta) en son sürümdeki `.apk` dosyasını indirin.
 
 ### B) Android Studio
 Klasörü *Open* ile açın → senkronizasyon bitince ▶ Run (telefon USB'den bağlı ve geliştirici modunda).
