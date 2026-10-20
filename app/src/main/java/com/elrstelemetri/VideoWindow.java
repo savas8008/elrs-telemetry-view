@@ -14,13 +14,14 @@ import android.widget.TextView;
 
 /**
  * Floating container for the video: drag the window to move it, drag the ◢ corner to resize it.
- * Buttons on the window: FULL switches to "replace the map", ✕ hides the video. Stays inside its parent.
+ * Buttons on the window: FULL/PIP switches between the panel and "replace the map", ✕ hides the video.
+ * Stays inside its parent.
  */
 public final class VideoWindow extends FrameLayout {
 
     public interface Listener {
-        /** FULL pressed: show the video instead of the map. */
-        void onExpand();
+        /** FULL/PIP pressed: switch between the floating panel and replacing the map. */
+        void onToggleFull();
 
         /** ✕ pressed: hide the video. */
         void onClose();
@@ -32,6 +33,7 @@ public final class VideoWindow extends FrameLayout {
     public final VideoPanel video;
     private final TextView handle;
     private final android.widget.LinearLayout controls;
+    private final TextView fullButton;
     private final int slop;
     private final int minW, minH;
     private Listener listener;
@@ -65,9 +67,10 @@ public final class VideoWindow extends FrameLayout {
 
         controls = new android.widget.LinearLayout(c);
         controls.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-        controls.addView(controlButton(c, "FULL", () -> {
-            if (listener != null) listener.onExpand();
-        }));
+        fullButton = controlButton(c, "FULL", () -> {
+            if (listener != null) listener.onToggleFull();
+        });
+        controls.addView(fullButton);
         controls.addView(controlButton(c, "✕", () -> {
             if (listener != null) listener.onClose();
         }));
@@ -107,7 +110,13 @@ public final class VideoWindow extends FrameLayout {
     public void setFloating(boolean f) {
         floating = f;
         handle.setVisibility(f ? View.VISIBLE : View.GONE);
-        controls.setVisibility(f ? View.VISIBLE : View.GONE);
+        // Panel: buttons top-right. Replacing the map: bottom-left (free while the map is hidden),
+        // because the top and sides are covered by the telemetry panels.
+        fullButton.setText(f ? "FULL" : "PIP");
+        LayoutParams lp = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT,
+                f ? Gravity.TOP | Gravity.END : Gravity.BOTTOM | Gravity.START);
+        if (!f) lp.setMargins(dp(8), 0, 0, dp(10));
+        controls.setLayoutParams(lp);
     }
 
     public boolean isFloating() {

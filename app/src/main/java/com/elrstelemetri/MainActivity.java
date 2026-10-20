@@ -86,7 +86,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     private N3UsbLink n3;
     private Intent launchIntent;
     private byte[] n3Sps, n3Pps;   // read thread only
-    private TextView bVideo, bExpand;
+    private TextView bVideo;
     private VideoPanel videoPanel;
     private VideoWindow videoWindow;
     private FrameLayout gcsRoot;
@@ -166,8 +166,9 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         videoWindow = new VideoWindow(this, videoPanel);
         videoWindow.setListener(new VideoWindow.Listener() {
             @Override
-            public void onExpand() {
-                setVideoMode(Settings.VIDEO_REPLACE_MAP);
+            public void onToggleFull() {
+                setVideoMode(settings.videoMode == Settings.VIDEO_REPLACE_MAP
+                        ? Settings.VIDEO_PANEL : Settings.VIDEO_REPLACE_MAP);
             }
 
             @Override
@@ -377,7 +378,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         Toast.makeText(this, "Connecting to the goggles…", Toast.LENGTH_SHORT).show();
     }
 
-    private void setVideoMode(int mode) {
+    void setVideoMode(int mode) {
         settings.videoMode = mode;
         if (mode != Settings.VIDEO_OFF) settings.videoShownMode = mode;
         settings.save(prefs);
@@ -391,8 +392,6 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         map.view.setVisibility(replace ? View.INVISIBLE : View.VISIBLE);
         if (bVideo != null) {
             ((GradientDrawable) bVideo.getBackground()).setColor(show ? Color.argb(220, 0, 140, 200) : C_PANEL);
-            bExpand.setVisibility(show ? View.VISIBLE : View.GONE);
-            bExpand.setText(replace ? "PIP" : "FULL");
         }
         if (!show) return;
         if (replace) {
@@ -1018,7 +1017,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             map.clearTrack();
             Toast.makeText(this, "Track cleared", Toast.LENGTH_SHORT).show();
         });
-        // 🥽 = goggles video panel on/off;  FULL/PIP = panel <-> instead of the map (shown while the video is on)
+        // 🥽 = goggles video panel on/off (FULL/PIP and ✕ are on the video itself)
         bVideo = mapButton(buttons, "🥽", v -> {
             boolean on = settings.videoMode == Settings.VIDEO_OFF;
             int shown = settings.videoShownMode == Settings.VIDEO_OFF ? Settings.VIDEO_PANEL : settings.videoShownMode;
@@ -1027,10 +1026,6 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
                 Toast.makeText(this, "Connect the goggles with a USB-C cable", Toast.LENGTH_SHORT).show();
             }
         });
-        bExpand = mapButton(buttons, "FULL", v -> setVideoMode(settings.videoMode == Settings.VIDEO_REPLACE_MAP
-                ? Settings.VIDEO_PANEL : Settings.VIDEO_REPLACE_MAP));
-        bExpand.setTextSize(11);
-        bExpand.setTypeface(Typeface.DEFAULT_BOLD);
         mapButton(buttons, "▣", v -> {
             settings.showPanels = !settings.showPanels;
             applyPanelVisibility();

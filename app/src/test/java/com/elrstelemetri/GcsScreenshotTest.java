@@ -115,6 +115,12 @@ public class GcsScreenshotTest {
         int h = root.getHeight() > 0 ? root.getHeight() : 780;
         render(root, w, h, "gcs.png");
 
+        a.setVideoMode(Settings.VIDEO_REPLACE_MAP);
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(300));
+        render(root, w, h, "gcs-full.png");
+        a.setVideoMode(Settings.VIDEO_PANEL);
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(300));
+
         Dialog settings = a.showSettings();
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(300));
         render(settings.getWindow().getDecorView(), w, h, "settings.png");

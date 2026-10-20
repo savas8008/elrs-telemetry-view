@@ -89,9 +89,8 @@ network streaming.
 
 Controls:
 - **🥽** in the bottom bar opens/closes the video panel (blue = open).
-- **FULL / PIP** in the bottom bar (visible while the panel is open) switches between the floating
-  panel and replacing the map.
-- On the floating panel: **FULL** = replace the map, **✕** = close, **◢** = resize, drag anywhere else to move.
+- On the floating panel (top-right): **FULL** = replace the map, **✕** = close; **◢** = resize, drag anywhere else to move.
+- While the video replaces the map (bottom-left): **PIP** = back to the floating panel, **✕** = close.
 
 Telemetry still comes from the backpack WiFi, so one device does everything: WiFi for telemetry,
 USB for video.
@@ -123,7 +122,7 @@ USB for video.
 | Bottom | Buttons |
 
 Buttons: **⌖** follow · **🗺** map layer · **⌂** reset home · **⌫** clear track ·
-**🥽** goggles video panel · **FULL/PIP** video panel ↔ replace the map · **▣** show/hide panels · **📊** flight summary · **⚙** settings
+**🥽** goggles video panel · **▣** show/hide panels · **📊** flight summary · **⚙** settings
 
 - **Altitude**: barometric altitude if the FC sends it (zeroed at arming), otherwise GPS altitude minus home altitude.
 - **Home**: taken automatically at the first GPS fix with 6 or more satellites.
