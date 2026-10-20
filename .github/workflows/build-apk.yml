@@ -19,6 +19,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Test ve debug APK
         run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+      - name: GCS ekran görüntüsü (Robolectric)
+        continue-on-error: true
+        run: ./gradlew --no-daemon testDebugUnitTest --tests '*GcsScreenshotTest*' -Pscreenshots=true
       - name: APK'yı yeniden adlandır
         run: cp app/build/outputs/apk/debug/app-debug.apk ELRS-Telemetri-${{ github.run_number }}.apk
       - uses: actions/upload-artifact@v4
@@ -32,6 +35,7 @@ jobs:
         run: |
           gh release create "build-${{ github.run_number }}" \
             "ELRS-Telemetri-${{ github.run_number }}.apk" \
+            $( [ -f app/build/screenshots/gcs.png ] && echo "app/build/screenshots/gcs.png#ekran-goruntusu.png" ) \
             --title "ELRS Telemetri - derleme ${{ github.run_number }}" \
             --notes "Otomatik derleme (${{ github.sha }}). APK'yı indirip telefona kurun." \
             --latest
