@@ -25,7 +25,7 @@ public class Settings {
     public static final int VIDEO_PANEL = 1;       // floating, movable, resizable panel
     public static final int VIDEO_REPLACE_MAP = 2; // video fills the screen instead of the map
     public static final String[] VIDEO_MODE_NAMES = {"Hidden", "Floating panel", "Replace the map"};
-    public int videoMode = VIDEO_PANEL;
+    public int videoMode = VIDEO_OFF;     // the app always starts with the video closed (see MainActivity)
     public int videoShownMode = VIDEO_PANEL;  // mode restored when the video is switched back on
     public boolean keepRunning = true;        // foreground service: keep working while another app is open
     /** Floating panel geometry as fractions of the screen; negative = default. */

@@ -102,7 +102,8 @@ network streaming.
    - **Replace the map**: the video fills the screen and the telemetry panels are overlaid on it.
 
 Controls:
-- The **goggles** button in the bottom bar opens/closes the video panel (blue = open).
+- The video is **closed when the app starts**. The **goggles** button in the bottom bar opens/closes it
+  (blue = open) and reopens it the way it was last shown (panel or full screen).
 - On the floating panel (top-right): **fullscreen** = replace the map, **✕** = close; **◢** = resize, drag anywhere else to move.
 - While the video replaces the map (bottom-left): **picture-in-picture** = back to the floating panel, **✕** = close.
 

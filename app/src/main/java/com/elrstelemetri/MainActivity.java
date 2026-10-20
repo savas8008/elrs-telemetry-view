@@ -121,6 +121,11 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         prefs = getSharedPreferences("settings", MODE_PRIVATE);
         settings.load(prefs);
+        // Goggles video starts closed; the goggles button reopens it in the last used mode (videoShownMode)
+        if (settings.videoMode != Settings.VIDEO_OFF) {
+            settings.videoMode = Settings.VIDEO_OFF;
+            settings.save(prefs);
+        }
         recordEnabled = settings.autoRecord;
 
         GcsMap.configure(this);
