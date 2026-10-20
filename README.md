@@ -88,8 +88,11 @@ straight into the GCS screen — no internet or streaming service needed.
    - **Replace the map**: the video fills the screen and the telemetry panels are overlaid on it.
    - **Hidden**.
 
-   **📹** cycles hidden / floating panel / replace the map; tapping the video switches between the
-   floating panel and replacing the map.
+   Controls:
+   - **📹** in the bottom bar switches the goggles video **on/off** (blue = on).
+   - **⤢ / ⤡** in the bottom bar (visible while the video is on) switches between the floating panel and
+     replacing the map.
+   - On the floating panel: **⤢** = replace the map, **✕** = hide, **◢** = resize, drag anywhere else to move.
 
 All URLs of this device are also listed in ⚙ **Settings → Video stream**.
 
@@ -108,7 +111,13 @@ Notes:
 - RTMP live streaming with goggles over USB is **community-reported**, not documented by DJI;
   availability depends on your goggles, aircraft/air unit and DJI Fly version.
 - The receiver accepts any stream key; a new stream replaces the previous one.
-- The receiver starts with the app and runs until the app is closed (port 1935 by default; configurable).
+- **Keep running in the background** (on by default, ⚙ Settings → Video stream): a notification
+  keeps the app alive while DJI Fly is in front, so the video receiver, telemetry, spoken alarms and
+  logging keep working. Without it Android pauses the app, the receiver stops reading, and DJI Fly
+  drops the stream. Use **Exit** in the notification to close the app completely.
+- When a stream ends, the video panel shows the time and the reason (e.g. "publisher disconnected" =
+  DJI Fly stopped sending).
+- Port 1935 by default; configurable.
 
 ## Screen
 
@@ -121,7 +130,7 @@ Notes:
 | Bottom | Buttons |
 
 Buttons: **⌖** follow · **🗺** map layer · **⌂** reset home · **⌫** clear track ·
-**📹** video hidden / floating panel / replace the map · **▣** show/hide panels · **📊** flight summary · **⚙** settings ·
+**📹** video on/off · **⤢/⤡** video panel ↔ replace the map · **▣** show/hide panels · **📊** flight summary · **⚙** settings ·
 **DJI Fly ▶** copy the stream URL and open DJI Fly
 
 - **Altitude**: barometric altitude if the FC sends it (zeroed at arming), otherwise GPS altitude minus home altitude.
@@ -180,6 +189,7 @@ permission needed). Open them with a file manager or import them into a spreadsh
 | Alarm repeat interval | 15 s |
 | UDP port | 14550 |
 | Video stream receiver | on, RTMP port 1935, floating panel (Medium, above the buttons) |
+| Keep running in the background | on |
 
 **Settings → Show raw UDP data** shows incoming packets for troubleshooting.
 
@@ -193,6 +203,7 @@ permission needed). Open them with a file manager or import them into a spreadsh
 | Map is empty/grey | The area was not downloaded. Download it before connecting to the backpack WiFi. |
 | No position | Is GPS enabled on the aircraft with GPS telemetry, with enough satellites? |
 | No voice | Install/enable an English voice in Android's text-to-speech settings. |
+| Video stops when switching between DJI Fly and this app | Make sure **Keep running in the background** is on (notification visible). If the panel shows "publisher disconnected", DJI Fly itself stopped streaming when it went to the background: use split screen so DJI Fly stays visible. |
 | No video | Is the DJI Fly device on the same network? Use a URL from Settings › Video stream (not 127.0.0.1 unless DJI Fly runs on the same device). Check that DJI Fly reports "streaming". |
 
 ## Technical details (verified against the source code)
@@ -228,7 +239,8 @@ permission needed). Open them with a file manager or import them into a spreadsh
 | `Alerts.java` | Spoken alarms and vibration |
 | `RtmpServer.java` | Minimal RTMP ingest server (handshake, chunks, AMF0, FLV H.264/H.265 → Annex-B) |
 | `VideoPanel.java` | MediaCodec decoding of the stream onto a TextureView |
-| `VideoWindow.java` | Floating video window: drag to move, corner handle to resize |
+| `VideoWindow.java` | Floating video window: drag to move, corner handle to resize, ⤢/✕ buttons |
+| `TelemetryService.java` | Foreground service that keeps the app running while another app is in front |
 | `SettingsDialog.java` | Settings screen |
 | `MainActivity.java` | UDP receiver and GCS screen |
 

@@ -8,10 +8,12 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.wifi.WifiManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -79,6 +81,8 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     private double rate;
     private String downloadStatus = "";
     private boolean downloading;
+    private boolean started;
+    private TextView bVideo, bExpand;
     private VideoPanel videoPanel;
     private VideoWindow videoWindow;
     private FrameLayout gcsRoot;
@@ -128,11 +132,9 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         videoPanel.setCallback(new VideoPanel.Callback() {
             @Override
             public void onStreamStarted(String remote) {
-                Toast.makeText(MainActivity.this, "Video stream connected: " + remote, Toast.LENGTH_SHORT).show();
-                if (settings.videoMode == Settings.VIDEO_OFF) {
-                    settings.videoMode = Settings.VIDEO_PANEL;
-                    applyVideoMode();
-                }
+                Toast.makeText(MainActivity.this, settings.videoMode == Settings.VIDEO_OFF
+                        ? "Video stream connected — tap 📹 to show it" : "Video stream connected: " + remote,
+                        Toast.LENGTH_SHORT).show();
             }
 
             @Override
@@ -143,10 +145,13 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         videoWindow = new VideoWindow(this, videoPanel);
         videoWindow.setListener(new VideoWindow.Listener() {
             @Override
-            public void onTap() {
-                settings.videoMode = settings.videoMode == Settings.VIDEO_REPLACE_MAP
-                        ? Settings.VIDEO_PANEL : Settings.VIDEO_REPLACE_MAP;
-                applyVideoMode();
+            public void onExpand() {
+                setVideoMode(Settings.VIDEO_REPLACE_MAP);
+            }
+
+            @Override
+            public void onClose() {
+                setVideoMode(Settings.VIDEO_OFF);
             }
 
             @Override
@@ -161,6 +166,27 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         });
         setContentView(buildUi());
         hideSystemBars();
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            // only for the "running in background" notification; everything works without it
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 1);
+        }
+        handleExit(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        handleExit(intent);
+    }
+
+    /** "Exit" from the notification: stop everything and close. */
+    private void handleExit(Intent intent) {
+        if (intent != null && TelemetryService.ACTION_EXIT.equals(intent.getAction())) {
+            stopAll();
+            TelemetryService.stop(this);
+            finishAndRemoveTask();
+        }
     }
 
     @Override
@@ -193,6 +219,30 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     @Override
     protected void onStart() {
         super.onStart();
+        startAll();
+        if (settings.keepRunning) TelemetryService.start(this);
+    }
+
+    @Override
+    protected void onStop() {
+        // With "keep running" on, telemetry, alarms, logging and the video receiver continue while
+        // another app (e.g. DJI Fly) is in front; the foreground service keeps the process alive.
+        if (!settings.keepRunning && !isChangingConfigurations()) stopAll();
+        super.onStop();
+    }
+
+    @Override
+    protected void onDestroy() {
+        stopAll();
+        TelemetryService.stop(this);
+        alerts.shutdown();
+        videoPanel.release();
+        super.onDestroy();
+    }
+
+    private void startAll() {
+        if (started) return;
+        started = true;
         WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
         mcLock = wm.createMulticastLock("elrs-telemetry");
         mcLock.setReferenceCounted(false);
@@ -204,23 +254,16 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         ui.post(logTick);
     }
 
-    @Override
-    protected void onStop() {
+    private void stopAll() {
+        if (!started) return;
+        started = false;
         ui.removeCallbacks(tick);
         ui.removeCallbacks(logTick);
         stopReceiver();
+        stopVideo();
         router.stop();
         logger.close();
         if (mcLock != null && mcLock.isHeld()) mcLock.release();
-        super.onStop();
-    }
-
-    @Override
-    protected void onDestroy() {
-        alerts.shutdown();
-        stopVideo();
-        videoPanel.release();
-        super.onDestroy();
     }
 
     // ================================================================ UDP
@@ -320,11 +363,23 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         return sp > 0 ? u.substring(0, sp) : u;
     }
 
+    private void setVideoMode(int mode) {
+        settings.videoMode = mode;
+        if (mode != Settings.VIDEO_OFF) settings.videoShownMode = mode;
+        settings.save(prefs);
+        applyVideoMode();
+    }
+
     private void applyVideoMode() {
         boolean show = settings.videoEnabled && settings.videoMode != Settings.VIDEO_OFF;
         boolean replace = show && settings.videoMode == Settings.VIDEO_REPLACE_MAP;
         videoWindow.setVisibility(show ? View.VISIBLE : View.GONE);
         map.view.setVisibility(replace ? View.INVISIBLE : View.VISIBLE);
+        if (bVideo != null) {
+            ((GradientDrawable) bVideo.getBackground()).setColor(show ? Color.argb(220, 0, 140, 200) : C_PANEL);
+            bExpand.setVisibility(show ? View.VISIBLE : View.GONE);
+            bExpand.setText(replace ? "⤡" : "⤢");
+        }
         if (!show) return;
         if (replace) {
             videoWindow.setFloating(false);
@@ -991,15 +1046,19 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             map.clearTrack();
             Toast.makeText(this, "Track cleared", Toast.LENGTH_SHORT).show();
         });
-        mapButton(buttons, "📹", v -> {
+        // 📹 = goggles video on/off;  ⤢/⤡ = panel ↔ instead of the map (shown only while the video is on)
+        bVideo = mapButton(buttons, "📹", v -> {
             if (!settings.videoEnabled) {
                 Toast.makeText(this, "Video stream is disabled in Settings", Toast.LENGTH_SHORT).show();
                 return;
             }
-            settings.videoMode = (settings.videoMode + 1) % 3;
-            applyVideoMode();
-            Toast.makeText(this, "Video: " + Settings.VIDEO_MODE_NAMES[settings.videoMode], Toast.LENGTH_SHORT).show();
+            boolean on = settings.videoMode == Settings.VIDEO_OFF;
+            int shown = settings.videoShownMode == Settings.VIDEO_OFF ? Settings.VIDEO_PANEL : settings.videoShownMode;
+            setVideoMode(on ? shown : Settings.VIDEO_OFF);
+            Toast.makeText(this, on ? "Video on" : "Video off", Toast.LENGTH_SHORT).show();
         });
+        bExpand = mapButton(buttons, "⤢", v -> setVideoMode(settings.videoMode == Settings.VIDEO_REPLACE_MAP
+                ? Settings.VIDEO_PANEL : Settings.VIDEO_REPLACE_MAP));
         mapButton(buttons, "▣", v -> {
             settings.showPanels = !settings.showPanels;
             applyPanelVisibility();

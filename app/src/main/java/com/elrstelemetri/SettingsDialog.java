@@ -299,6 +299,9 @@ public class SettingsDialog {
     private void buildVideo(LinearLayout col) {
         LinearLayout card = card(col, "VIDEO STREAM (DJI FLY)");
         Switch en = sw(card, "Receive video stream (RTMP)", s.videoEnabled);
+        Switch keep = sw(card, "Keep running in the background", s.keepRunning);
+        hint(card, "Keeps the video receiver, telemetry, alarms and logging running while DJI Fly or another app is "
+                + "in front (shows a notification). If this is off, DJI Fly's stream stops when you switch apps.");
         LinearLayout row = new LinearLayout(ctx);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.addView(label("RTMP port"), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -330,7 +333,9 @@ public class SettingsDialog {
         card.addView(sizes);
         card.addView(presetInfo);
         savers.add(() -> {
+            s.keepRunning = keep.isChecked();
             s.videoMode = checkedIndex(mode, s.videoMode);
+            if (s.videoMode != Settings.VIDEO_OFF) s.videoShownMode = s.videoMode;
             if (preset[0] >= 0) applyPreset(preset[0]);
         });
 

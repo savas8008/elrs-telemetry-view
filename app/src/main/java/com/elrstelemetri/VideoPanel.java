@@ -56,6 +56,7 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
     private volatile boolean connected;
     private volatile String remote = "";
     private String idleText = "";
+    private volatile String lastEnd = "";
 
     public VideoPanel(Context c) {
         super(c);
@@ -91,7 +92,9 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
             status.setText("");
             status.setBackgroundColor(Color.TRANSPARENT);
         } else {
-            status.setText(connected ? "Stream connected from " + remote + "\nwaiting for video…" : idleText);
+            String t = connected ? "Stream connected from " + remote + "\nwaiting for video…" : idleText;
+            if (!connected && !lastEnd.isEmpty()) t += "\n" + lastEnd;
+            status.setText(t);
             status.setBackgroundColor(Color.argb(170, 0, 0, 0));
         }
     }
@@ -166,6 +169,8 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
     @Override
     public void onDisconnect(String reason) {
         connected = false;
+        lastEnd = "Last stream ended " + new java.text.SimpleDateFormat("HH:mm:ss", Locale.US).format(new java.util.Date())
+                + " (" + reason + ")";
         ui.post(() -> {
             if (callback != null) callback.onStreamStopped();
         });

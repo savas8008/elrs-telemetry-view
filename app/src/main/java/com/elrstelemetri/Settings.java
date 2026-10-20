@@ -28,6 +28,8 @@ public class Settings {
     public boolean videoEnabled = true;   // RTMP receiver for DJI Fly live streaming
     public int videoPort = 1935;
     public int videoMode = VIDEO_PANEL;
+    public int videoShownMode = VIDEO_PANEL;  // mode restored when the video is switched back on
+    public boolean keepRunning = true;        // foreground service: keep working while another app is open
     /** Floating panel geometry as fractions of the screen; negative = default. */
     public float videoX = -1, videoY = -1, videoW = -1, videoH = -1;
 
@@ -54,6 +56,8 @@ public class Settings {
         videoEnabled = p.getBoolean("videoEnabled", videoEnabled);
         videoPort = p.getInt("videoPort", videoPort);
         videoMode = p.getInt("videoMode", videoMode);
+        videoShownMode = p.getInt("videoShownMode", videoShownMode);
+        keepRunning = p.getBoolean("keepRunning", keepRunning);
         videoX = p.getFloat("videoX", -1);
         videoY = p.getFloat("videoY", -1);
         videoW = p.getFloat("videoW", -1);
@@ -82,6 +86,8 @@ public class Settings {
                 .putBoolean("videoEnabled", videoEnabled)
                 .putInt("videoPort", videoPort)
                 .putInt("videoMode", videoMode)
+                .putInt("videoShownMode", videoShownMode)
+                .putBoolean("keepRunning", keepRunning)
                 .putFloat("videoX", videoX)
                 .putFloat("videoY", videoY)
                 .putFloat("videoW", videoW)

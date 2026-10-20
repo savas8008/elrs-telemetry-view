@@ -13,13 +13,17 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 
 /**
- * Floating container for the video: drag the window to move it, drag the ◢ corner to resize it,
- * tap to toggle between the panel and "replace the map". Stays inside its parent.
+ * Floating container for the video: drag the window to move it, drag the ◢ corner to resize it.
+ * Buttons on the window: ⤢ switch to "replace the map", ✕ hide the video. Stays inside its parent.
  */
 public final class VideoWindow extends FrameLayout {
 
     public interface Listener {
-        void onTap();
+        /** ⤢ pressed: show the video instead of the map. */
+        void onExpand();
+
+        /** ✕ pressed: hide the video. */
+        void onClose();
 
         /** Position or size changed by the user (to persist it). */
         void onGeometryChanged();
@@ -27,6 +31,7 @@ public final class VideoWindow extends FrameLayout {
 
     public final VideoPanel video;
     private final TextView handle;
+    private final android.widget.LinearLayout controls;
     private final int slop;
     private final int minW, minH;
     private Listener listener;
@@ -57,6 +62,33 @@ public final class VideoWindow extends FrameLayout {
         LayoutParams hl = new LayoutParams(dp(34), dp(34), Gravity.BOTTOM | Gravity.END);
         addView(handle, hl);
         handle.setOnTouchListener(this::onResizeTouch);
+
+        controls = new android.widget.LinearLayout(c);
+        controls.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        controls.addView(controlButton(c, "⤢", () -> {
+            if (listener != null) listener.onExpand();
+        }));
+        controls.addView(controlButton(c, "✕", () -> {
+            if (listener != null) listener.onClose();
+        }));
+        addView(controls, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END));
+    }
+
+    private TextView controlButton(Context c, String text, Runnable action) {
+        TextView b = new TextView(c);
+        b.setText(text);
+        b.setTextSize(17);
+        b.setTextColor(Color.WHITE);
+        b.setGravity(Gravity.CENTER);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.argb(160, 0, 0, 0));
+        bg.setCornerRadius(dp(6));
+        b.setBackground(bg);
+        b.setOnClickListener(v -> action.run());
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(dp(34), dp(34));
+        lp.setMargins(dp(3), dp(3), dp(3), 0);
+        b.setLayoutParams(lp);
+        return b;
     }
 
     private int dp(float v) {
@@ -71,6 +103,7 @@ public final class VideoWindow extends FrameLayout {
     public void setFloating(boolean f) {
         floating = f;
         handle.setVisibility(f ? View.VISIBLE : View.GONE);
+        controls.setVisibility(f ? View.VISIBLE : View.GONE);
     }
 
     public boolean isFloating() {
@@ -147,11 +180,7 @@ public final class VideoWindow extends FrameLayout {
                 }
                 return true;
             case MotionEvent.ACTION_UP:
-                if (dragging) {
-                    if (listener != null) listener.onGeometryChanged();
-                } else if (listener != null) {
-                    listener.onTap();
-                }
+                if (dragging && listener != null) listener.onGeometryChanged();
                 dragging = false;
                 return true;
             case MotionEvent.ACTION_CANCEL:
