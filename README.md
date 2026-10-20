@@ -144,7 +144,10 @@ goggles video panel · show/hide panels · flight summary · settings
 - **Home**: taken automatically at the first GPS fix with 6 or more satellites.
 - **Arm state**: Betaflight/INAV append `*` to the flight mode while disarmed. Flight controllers that
   don't do this show "ARM ?", and flight time runs while telemetry is received.
-- Values older than 3 seconds turn grey.
+- Values turn grey when they stop updating. The timeout adapts to the **telemetry ratio**: at 1:2–1:8
+  each sensor arrives several times a second (timeout 3 s); at 1:32 and lower the sensors share very
+  little bandwidth and each may arrive only every few seconds, so the timeout grows with the observed
+  interval (up to 20 s). For a lively display use 1:2–1:8 if your link budget allows it.
 
 ## Alarms
 

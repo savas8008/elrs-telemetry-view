@@ -71,7 +71,11 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
     private Thread rxThread;
     private WifiManager.MulticastLock mcLock;
     private WifiManager.WifiLock wifiLock;
-    private volatile int dataGaps;  // telemetry pauses > STALE_MS after data had arrived
+    private volatile int dataGaps;
+    // Per-sensor timeouts that follow the telemetry ratio (see SensorFreshness)
+    private final SensorFreshness fLink = new SensorFreshness(), fGps = new SensorFreshness(),
+            fAtt = new SensorFreshness(), fBatt = new SensorFreshness(), fBaro = new SensorFreshness(),
+            fVario = new SensorFreshness(), fMode = new SensorFreshness();  // telemetry pauses > STALE_MS after data had arrived
     private SharedPreferences prefs;
 
     private GcsMap map;
@@ -470,12 +474,12 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         synchronized (state) {
             TelemetryState s = state;
             long lastTelemetry = Math.max(s.linkTime, Math.max(s.batteryTime, s.gpsTime));
-            linkFresh = fresh(lastTelemetry, now);
-            boolean ls = !fresh(s.linkTime, now);
-            boolean gpsFresh = fresh(s.gpsTime, now);
-            boolean attFresh = fresh(s.attitudeTime, now);
-            boolean battFresh = fresh(s.batteryTime, now);
-            boolean baroFresh = fresh(s.baroTime, now);
+            boolean ls = !fLink.isFresh(s.linkTime, now);
+            boolean gpsFresh = fGps.isFresh(s.gpsTime, now);
+            boolean attFresh = fAtt.isFresh(s.attitudeTime, now);
+            boolean battFresh = fBatt.isFresh(s.batteryTime, now);
+            boolean baroFresh = fBaro.isFresh(s.baroTime, now);
+            linkFresh = !ls || battFresh || gpsFresh;
             boolean hasFix = s.gpsTime != 0 && s.sats >= 4 && (s.lat != 0 || s.lon != 0);
             if (linkFresh) hadData = true;
 
@@ -503,7 +507,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
 
             // Arm state: Betaflight/INAV append '*' to the flight mode while disarmed
             String mode = s.flightMode == null ? "" : s.flightMode.trim();
-            curArmedKnown = fresh(s.modeTime, now) && !mode.isEmpty();
+            curArmedKnown = fMode.isFresh(s.modeTime, now) && !mode.isEmpty();
             curArmed = curArmedKnown && !mode.endsWith("*");
             boolean flying = linkFresh && (!curArmedKnown || curArmed);
 
@@ -549,7 +553,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
             map.update(hasFix, s.lat, s.lon, curHeading, !gpsFresh, s.homeSet, s.homeLat, s.homeLon);
 
             // ---- Top bar
-            setText(tMode, mode.isEmpty() ? "MODE —" : mode.replace("*", ""), C_TEXT, !fresh(s.modeTime, now));
+            setText(tMode, mode.isEmpty() ? "MODE —" : mode.replace("*", ""), C_TEXT, !fMode.isFresh(s.modeTime, now));
             if (!curArmedKnown) styleChip(tArm, "ARM ?", C_STALE);
             else styleChip(tArm, curArmed ? "ARMED" : "DISARMED", curArmed ? C_BAD : C_OK);
             tTimer.setText(FlightStats.formatDuration(stats.flightMs));
@@ -576,7 +580,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
             setText(vAlt, Double.isNaN(curRelAlt) ? "—" : String.format(Locale.US, "%.0f m", curRelAlt),
                     altAlarm ? C_BAD : C_TEXT, !altValid);
             setText(vVario, String.format(Locale.US, "%+.1f m/s", s.varioMs), varioColor(s.varioMs),
-                    !fresh(s.varioTime, now));
+                    !fVario.isFresh(s.varioTime, now));
             boolean spdAlarm = al.isActive(AlarmSet.MIN_SPEED) || al.isActive(AlarmSet.MAX_SPEED);
             setText(vSpeed, String.format(Locale.US, "%.0f km/h", s.groundSpeedKmh), spdAlarm ? C_BAD : C_TEXT, !gpsFresh);
             setText(vDist, Double.isNaN(curDist) ? "no home" : formatDist(curDist),
