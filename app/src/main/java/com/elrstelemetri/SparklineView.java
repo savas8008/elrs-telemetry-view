@@ -9,7 +9,7 @@ import android.view.View;
 
 import java.util.Locale;
 
-/** Halka tampondan son N örneği çizen küçük çizgi grafik. */
+/** Small line chart drawing the last N samples from a ring buffer. */
 public class SparklineView extends View {
 
     private final String title;
@@ -79,7 +79,7 @@ public class SparklineView extends View {
         for (int i = 0; i < count; i++) {
             float v = data[(pos - count + i + n) % n];
             if (Float.isNaN(v)) continue;
-            float x = w * (n - count + i) / (float) (n - 1);  // en yeni örnek sağ kenarda
+            float x = w * (n - count + i) / (float) (n - 1);  // newest sample at the right edge
             float y = bottom - (v - min) / (max - min) * (bottom - top);
             if (!started) {
                 path.moveTo(x, y);

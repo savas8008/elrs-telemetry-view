@@ -1,143 +1,190 @@
 # ELRS Telemetry View — Android GCS
 
-ExpressLRS kumandanızın telemetrisini **telefonda veya tablette, harita üzerinde** gösteren
-yer kontrol istasyonu (GCS). MAVLink gerekmez: TX Backpack'in **Telemetry = WiFi** modunda
-yayınladığı CRSF telemetrisini doğrudan okur.
+A ground control station (GCS) for Android phones and tablets that shows your ExpressLRS
+radio's telemetry **on a map**. No MAVLink needed: it reads the CRSF telemetry that the
+**TX Backpack** broadcasts over WiFi when **Telemetry = WiFi** is selected.
 
 > [!IMPORTANT]
-> **"Telemetry = WiFi" seçince backpack WiFi'ı açılmıyorsa backpack firmware'inizi güncelleyin.**
-> Backpack **1.5.7 ve öncesinde** bu mod çalışmıyor; düzeltme **1.5.8**'de geldi
-> (Backpack deposu, commit `2c863af` "Fix Normal TLM mode wifi"). En az **1.5.8**, tercihen en
-> güncel sürümü (1.5.9) yükleyin. RadioMaster TX15 üzerinde güncellemeden sonra çalıştığı doğrulandı.
+> **If the backpack WiFi does not come up after selecting "Telemetry = WiFi", update the TX Backpack firmware.**
+> This mode does not work on Backpack **1.5.7 and older**; the fix shipped in **1.5.8**
+> (Backpack repository, commit `2c863af` "Fix Normal TLM mode wifi"). Install at least **1.5.8**,
+> preferably the latest release. Confirmed working on a RadioMaster TX15 after updating.
 >
-> Sürümünüzü görmek için: ELRS Lua → **Backpack → Version**.
-> Güncellemek için: **ExpressLRS Configurator → Backpack** sekmesi → üreticiniz ve modülünüz
-> (ör. *RadioMaster TX15 2.4/900 TX*) → yöntem **EdgeTX Passthrough** (kumanda USB'den bağlı,
-> "USB Serial (VCP)" seçili) veya WiFi.
+> Check your version: ELRS Lua → **Backpack → Version**.
+> Update: **ExpressLRS Configurator → Backpack** tab → your manufacturer and module
+> (e.g. *RadioMaster TX15 2.4/900 TX*) → method **EdgeTX Passthrough** (radio connected over USB
+> in "USB Serial (VCP)" mode) or WiFi.
 
-## Özellikler
+> [!NOTE]
+> **The backpack WiFi has no internet.** While the phone is connected to it, the map can only show
+> tiles stored on the device. **Download your flying area before you go** (see
+> [Offline maps](#offline-maps)). Everything else — telemetry, alarms, voice, logging — works
+> without internet.
 
-- **Tam ekran harita**: Uydu (Esri), Sokak (OpenStreetMap) veya Topoğrafik (OpenTopoMap)
-- **Uçak simgesi** gidiş yönüne göre döner, **uçuş izi** (rota) çizilir, **ev noktası** ve eve uzanan çizgi
-- **Takip modu**: harita uçağı izler; haritayı sürükleyince kapanır, ⌖ ile tekrar açılır
-- **Yapay ufuk** ve pusula şeridi
-- **Tüm telemetri tek ekranda**: irtifa, vario, hız, ev uzaklığı, eve dönüş yönü, GPS irtifası,
-  voltaj, hücre voltajı, akım, harcanan mAh, güç, LQ, RSSI, SNR, TX gücü, downlink, anten, RF modu,
-  uydu sayısı, uçuş modu, ARM durumu
-- **İrtifa ve voltaj grafikleri** (son 5 dakika)
-- **Uçuş kaydı (CSV)**: varsayılan olarak açık; veri gelince otomatik başlar
-- **Sesli uyarılar** (Türkçe): düşük batarya, zayıf bağlantı, telemetri kaybı
-- **Uçuş özeti**: süre, en yüksek irtifa, en uzak mesafe, en yüksek hız/akım, en düşük hücre voltajı
-- Varsayılan **yatay ekran**, tam ekran, ekran kapanmaz
+## Features
 
-## Hızlı başlangıç
+- **Full-screen map**: Satellite, Topographic, Street (Esri) or OpenStreetMap
+- **Offline maps**: download the visible area for use without internet
+- **Aircraft icon** rotated to heading, **flight track**, **home** marker and a line to home
+- **Follow mode**: the map tracks the aircraft; dragging the map turns it off, ⌖ turns it back on
+- **Artificial horizon** with compass tape
+- **All telemetry on one screen**: altitude, vario, speed, distance and direction to home, GPS altitude,
+  voltage, cell voltage, current, consumed mAh, power, LQ, RSSI, SNR, TX power, downlink, antenna,
+  RF mode, satellites, flight mode, arm state
+- **Altitude and voltage charts** (last 5 minutes)
+- **Configurable alarms** with on-screen banner, voice and vibration (see [Alarms](#alarms))
+- **Flight log (CSV)**: on by default, starts automatically when telemetry arrives
+- **Flight summary**: duration, max altitude, max distance, max speed/current, min cell voltage
+- Landscape, full screen, screen stays on
 
-1. **APK'yı kurun**: deponun **Releases** bölümünden en son `ELRS-Telemetri-*.apk` dosyasını indirip açın
-   ("bilinmeyen kaynaklardan yükleme" iznini verin). Android 10 veya üstü gerekir.
-2. Kumandada **Link Mode = Normal** olsun (MAVLink değil).
-3. ELRS Lua → **Backpack → Telemetry → WiFi**. Seçenek zaten WiFi ise önce Off yapıp tekrar WiFi seçin.
-   Backpack yeniden başlar; birkaç saniye bekleyin.
-4. Telefonu/tableti **`ExpressLRS TX Backpack XXXXXX`** ağına bağlayın, şifre **`expresslrs`**.
-   Android "İnternet yok" derse **Bağlı kal**'ı seçin.
-5. Uygulamayı açın. Veri birkaç saniye içinde gelmeye başlar.
+## Quick start
 
-### Harita için internet
+1. **Install the APK**: download the latest `ELRS-Telemetry-*.apk` from this repository's **Releases**
+   and open it (allow "install unknown apps"). Requires Android 10 or newer.
+2. **Download offline maps** for your flying area while you still have internet (⚙ Settings → Map & offline maps).
+3. On the radio, set **Link Mode = Normal** (not MAVLink).
+4. ELRS Lua → **Backpack → Telemetry → WiFi**. If it already shows WiFi, set it to Off and back to WiFi.
+   The backpack restarts; wait a few seconds.
+5. Connect the phone/tablet to the WiFi network **`ExpressLRS TX Backpack XXXXXX`**, password **`expresslrs`**.
+   When Android warns that the network has no internet, choose to **stay connected**.
+6. Open the app. Telemetry appears within a few seconds.
 
-Backpack ağında internet yoktur. Uygulama bunu algılar: telemetriyi WiFi'dan okurken **harita
-karolarını mobil veri üzerinden indirir**. Bunun için **mobil veriyi açık bırakın**. Üst çubuğun
-sağında hangi yolun kullanıldığı yazar ("harita: mobil veri" / "harita: internet yok").
+## Offline maps
 
-Gezdiğiniz harita bölgeleri cihazda önbelleğe alınır (en fazla ~600 MB). Sahada internet yoksa
-uçuştan önce evde, internetliyken uçuş bölgesini farklı yakınlaştırma seviyelerinde bir kez gezin.
+The phone is on the backpack WiFi during flight, so there is no internet for map tiles.
 
-## Ekran
+1. At home (or anywhere with internet), open the app and pan/zoom the map to your flying field.
+2. ⚙ **Settings → Map & offline maps**: pick the layer and a **detail level** (max zoom 15–18).
+   The screen shows the number of tiles and the approximate size.
+3. Tap **Download visible area**. Progress is shown in the settings screen and in the bottom-left info box.
 
-| Bölge | İçerik |
+Notes:
+- Downloads are limited to 30,000 tiles per area; zoom in or lower the detail level for larger areas.
+- The cache holds up to 2 GB and is kept for a year. Delete it via Android Settings › Apps ›
+  ELRS Telemetry › Storage › Clear storage.
+- Satellite, Topographic and Street (Esri) can be downloaded. The **OpenStreetMap** layer is
+  **online only** because the OpenStreetMap tile policy forbids bulk downloads.
+- If mobile data happens to be available while on the backpack WiFi, the app uses it for map tiles
+  automatically. The top bar shows the source: `map: mobile data`, `map: offline cache` or `map: WiFi internet`.
+
+## Screen
+
+| Area | Content |
 |---|---|
-| Üst çubuk | Uçuş modu, ARM durumu, uçuş süresi, LQ, RSSI, uydu, kayıt durumu (dokununca açılır/kapanır), kaynak IP ve paket hızı |
-| Sol panel | Yapay ufuk + pusula, irtifa, vario, yer hızı, ev uzaklığı, eve dönüş yönü (ok: uçağın burnuna göre), GPS irtifası |
-| Sağ panel | Pil göstergesi, hücre voltajı, akım, harcanan mAh, güç; SNR, TX gücü, downlink, anten/RF; irtifa ve voltaj grafikleri |
-| Orta üst | Uyarılar (kırmızı = kritik) |
-| Alt | Koordinat ve kayıt dosyası; düğmeler |
+| Top bar | Flight mode, arm state, flight time, LQ, RSSI, satellites, logging state (tap to toggle), source IP, packet rate, map source |
+| Left panel | Artificial horizon + compass, altitude, vario, ground speed, home distance, direction to home (arrow relative to the nose), GPS altitude |
+| Right panel | Battery gauge, cell voltage, current, consumed mAh, power; SNR, TX power, downlink, antenna/RF; altitude and voltage charts |
+| Top centre | Alarms (red) and notices — **tap to mute alarms for 2 minutes** |
+| Bottom | Coordinates, log file, download progress; buttons |
 
-Düğmeler: **⌖** takip modu · **🗺** harita katmanı · **⌂** ev noktasını yeniden al · **⌫** izi temizle ·
-**▣** panelleri gizle/göster · **📊** uçuş özeti · **⚙** ayarlar
+Buttons: **⌖** follow · **🗺** map layer · **⌂** reset home · **⌫** clear track ·
+**▣** show/hide panels · **📊** flight summary · **⚙** settings
 
-- **İrtifa**: barometre verisi varsa baro (uçuş kontrolcüsü kalkışta sıfırlar), yoksa GPS irtifası − ev irtifası.
-- **Ev noktası**: uydu sayısı 6 ve üstü olan ilk GPS verisinde otomatik alınır.
-- **ARM durumu**: Betaflight/INAV disarm iken uçuş modunun sonuna `*` ekler; buna göre gösterilir.
-  Bu bilgiyi göndermeyen uçuş kontrolcülerinde "ARM ?" görünür ve uçuş süresi telemetri geldiği sürece sayılır.
-- 3 saniyeden eski veriler griye döner.
+- **Altitude**: barometric altitude if the FC sends it (zeroed at arming), otherwise GPS altitude minus home altitude.
+- **Home**: taken automatically at the first GPS fix with 6 or more satellites.
+- **Arm state**: Betaflight/INAV append `*` to the flight mode while disarmed. Flight controllers that
+  don't do this show "ARM ?", and flight time runs while telemetry is received.
+- Values older than 3 seconds turn grey.
 
-## Uçuş kaydı
+## Alarms
 
-Kayıtlar **İndirilenler / ELRS-Telemetri** klasörüne `ucus_YYYYAAGG_SSDDss.csv` adıyla yazılır
-(depolama izni gerekmez). Dosya yöneticisinden açabilir, Excel / Google E-Tablolar'a aktarabilirsiniz.
+Every alarm can be switched on/off and has an adjustable threshold in ⚙ **Settings → Alarms**.
+An active alarm turns the related value red, shows a red banner, is spoken (on-device TTS, no
+internet needed) and vibrates. It repeats at the configured interval (default 15 s).
 
-- Telemetri gelmeye başlayınca kayıt **otomatik** başlar; 30 saniye veri gelmezse dosya kapanır,
-  veri tekrar gelince yeni dosya açılır.
-- Üst çubuktaki **REC** etiketine dokunarak kaydı elle durdurup başlatabilirsiniz.
-- Sütunlar: zaman, enlem, boylam, GPS/göreli/baro irtifa, vario, hız, yön, uydu, pitch/roll/yaw,
-  voltaj, hücre voltajı, akım, mAh, kalan %, güç, RSSI 1/2, LQ, SNR, TX gücü, downlink RSSI/LQ,
-  uçuş modu, ev uzaklığı, ev yönü.
+| Alarm | Default | Triggers when |
+|---|---|---|
+| Low cell voltage | **on**, 3.50 V | cell voltage < threshold |
+| Low battery capacity | **on**, 20 % | remaining % < threshold (only if the FC reports it) |
+| Low link quality | **on**, 50 % | LQ < threshold |
+| Low RSSI | off, −100 dBm | best antenna RSSI < threshold |
+| Telemetry lost | **on**, 3 s | no telemetry for longer than the threshold |
+| Minimum altitude | off, 20 m | altitude < threshold, after having been above it in flight |
+| Maximum altitude | **on**, 120 m | altitude > threshold |
+| Minimum speed | off, 25 km/h | ground speed < threshold, after having been above it in flight |
+| Maximum speed | off, 150 km/h | ground speed > threshold |
+| Maximum distance | off, 1000 m | distance from home > threshold |
+| Low GPS satellites | **on**, 6 | satellites < threshold |
 
-## Varsayılan ayarlar
+- A small hysteresis band prevents alarms from flickering around the threshold.
+- Minimum altitude and minimum speed **arm only after the value has been above the threshold** during
+  the current flight, so they stay quiet on the ground and reset when you disarm.
+- **Reset alarms** in the settings screen restores the defaults.
 
-| Ayar | Varsayılan |
+## Flight log
+
+Logs are written to **Downloads / ELRS-Telemetry** as `flight_YYYYMMDD_HHMMSS.csv` (no storage
+permission needed). Open them with a file manager or import them into a spreadsheet.
+
+- Logging starts **automatically** when telemetry arrives; the file is closed after 30 s without data
+  and a new file is opened when data resumes.
+- Tap **REC** in the top bar to stop/start logging manually.
+- Columns: time, lat, lon, GPS/relative/baro altitude, vario, speed, heading, satellites,
+  pitch/roll/yaw, voltage, cell voltage, current, mAh, remaining %, power, RSSI 1/2, LQ, SNR,
+  TX power, downlink RSSI/LQ, flight mode, home distance, home bearing, active alarms.
+
+## Default settings
+
+| Setting | Default |
 |---|---|
-| Harita katmanı | Uydu |
-| Otomatik kayıt | Açık |
-| Kayıt sıklığı | 5 Hz (1 / 2 / 5 / 10 Hz seçilebilir) |
-| Sesli uyarılar | Açık (15 sn'de bir tekrar) |
-| Düşük hücre voltajı uyarısı | 3.50 V |
-| Düşük LQ uyarısı | %50 |
+| Map layer | Satellite |
+| Offline detail level | zoom 17 |
+| Automatic logging | on |
+| Log rate | 5 Hz (1 / 2 / 5 / 10 Hz) |
+| Spoken alarms | on |
+| Vibrate on alarm | on |
+| Alarm repeat interval | 15 s |
 | UDP port | 14550 |
 
-Tümü **⚙ Ayarlar**'dan değiştirilebilir. Ayarlar ekranındaki **Ham veri** gelen UDP paketlerini
-gösterir (sorun giderme için).
+**Settings → Show raw UDP data** shows incoming packets for troubleshooting.
 
-## Sorun giderme
+## Troubleshooting
 
-| Belirti | Çözüm |
+| Symptom | Fix |
 |---|---|
-| Backpack WiFi ağı görünmüyor | Backpack firmware'i 1.5.8+ olmalı (yukarıdaki nota bakın). Telemetry seçeneğini Off → WiFi yapın, birkaç saniye bekleyin. |
-| "Telemetri bekleniyor" | Telefon backpack ağına bağlı mı? Android ağdan kopmuş olabilir ("Bağlı kal"). |
-| "MAVLink verisi geliyor" | Kumandada Link Mode'u **Normal** yapın. |
-| Harita boş/gri | Mobil veri açık mı? Üst çubukta "harita: internet yok" yazıyorsa yalnızca önbellekteki bölgeler görünür. |
-| Konum yok | Uçakta GPS ve GPS telemetrisi açık mı, uydu sayısı yeterli mi? |
+| Backpack WiFi network does not appear | Backpack firmware must be 1.5.8+ (see the note at the top). Set Telemetry Off → WiFi and wait a few seconds. |
+| "Waiting for telemetry" | Is the device connected to the backpack WiFi? Android may have dropped it ("stay connected"). |
+| "Receiving MAVLink" | Set Link Mode to **Normal** on the radio. |
+| Map is empty/grey | The area was not downloaded. Download it before connecting to the backpack WiFi. |
+| No position | Is GPS enabled on the aircraft with GPS telemetry, with enough satellites? |
+| No voice | Install/enable an English voice in Android's text-to-speech settings. |
 
-## Teknik ayrıntılar (kaynak koddan doğrulandı)
+## Technical details (verified against the source code)
 
-- **ELRS TX 3.5.0+**: Lua'daki `Off;ESPNOW;WiFi` seçeneği ve CRSF telemetrisinin backpack'e gönderilmesi
-  (`devBackpack.cpp`, `sendCRSFTelemetryToBackpack`). Link Mode MAVLink iken CRSF gönderilmez.
-- **Backpack 1.5.8+**: WiFi seçilince backpack ayarı kaydedip yeniden başlar, WiFi'ı AP (veya tanımlıysa
-  ev ağı) olarak açar ve her CRSF çerçevesini MSP v2 (`$X<`, fonksiyon `0x0011`) içinde **UDP broadcast**
-  olarak **14550** portuna gönderir.
-- Ağ adı: `ExpressLRS TX Backpack XXXXXX` (XXXXXX = bind phrase UID'sinin son 3 baytı), şifre
+- **ELRS TX 3.5.0+**: the `Off;ESPNOW;WiFi` Lua option and forwarding CRSF telemetry to the backpack
+  (`devBackpack.cpp`, `sendCRSFTelemetryToBackpack`). No CRSF is forwarded when Link Mode is MAVLink.
+- **Backpack 1.5.8+**: selecting WiFi stores the setting and reboots the backpack, which starts WiFi as an
+  access point (or joins a configured home network) and sends every CRSF frame inside MSP v2
+  (`$X<`, function `0x0011`) as a **UDP broadcast** to port **14550**.
+- Network name `ExpressLRS TX Backpack XXXXXX` (XXXXXX = last 3 bytes of the bind-phrase UID), password
   `expresslrs`, backpack IP `10.0.0.1`.
 
-## APK derleme
+## Building
 
-- **GitHub Actions**: `main` dalına her gönderimde testler çalışır, APK derlenir ve **Releases**'e eklenir.
-- **Android Studio**: klasörü açıp ▶ Run.
-- Testler: `./gradlew testDebugUnitTest`
+- **GitHub Actions**: every push to `main` runs the tests, builds the APK, renders screenshots and
+  publishes them to **Releases**.
+- **Android Studio**: open the folder and press ▶ Run.
+- Tests: `./gradlew testDebugUnitTest`
 
-## Kod yapısı
+## Code layout
 
-| Dosya | Görev |
+| File | Purpose |
 |---|---|
-| `CrsfParser.java` | CRSF çerçeve tarama, CRC8 (0xD5), telemetri tiplerini çözme |
-| `TelemetryState.java` | Son değerler, ev noktası, uzaklık/yön |
-| `FlightStats.java` | Uçuş süresi, en yüksek/en düşük değerler, grafik geçmişi |
-| `FlightLogger.java` | CSV kaydı (MediaStore → İndirilenler) |
-| `GcsMap.java`, `PlaneOverlay.java` | osmdroid harita, katmanlar, iz, uçak/ev çizimi |
-| `HorizonView.java`, `BatteryView.java`, `SparklineView.java` | Göstergeler |
-| `Alerts.java` | Türkçe sesli uyarılar |
-| `MainActivity.java` | UDP alıcı, GCS ekranı, ayarlar |
+| `CrsfParser.java` | CRSF frame scanning, CRC8 (0xD5), telemetry decoding |
+| `TelemetryState.java` | Latest values, home position, distance/bearing |
+| `AlarmSet.java` | Threshold alarms with hysteresis and arm-after-crossing logic |
+| `FlightStats.java` | Flight time, min/max values, chart history |
+| `FlightLogger.java` | CSV logging (MediaStore → Downloads) |
+| `GcsMap.java`, `PlaneOverlay.java` | osmdroid map, layers, offline downloads, track, aircraft/home drawing |
+| `NetRouter.java` | Binds telemetry to WiFi and routes map traffic to mobile data when available |
+| `HorizonView.java`, `BatteryView.java`, `SparklineView.java` | Instruments |
+| `Alerts.java` | Spoken alarms and vibration |
+| `SettingsDialog.java` | Settings screen |
+| `MainActivity.java` | UDP receiver and GCS screen |
 
-## Harita verisi
+## Map data
 
-Harita kütüphanesi: [osmdroid](https://github.com/osmdroid/osmdroid) (Apache 2.0).
-Sokak haritası © OpenStreetMap katkıcıları; topoğrafik harita © OpenTopoMap (CC-BY-SA);
-uydu görüntüsü © Esri, Maxar, Earthstar Geographics. Karo sunucularının kullanım koşulları
-kişisel ve düşük hacimli kullanım içindir; toplu indirme yapılmaz.
+Map library: [osmdroid](https://github.com/osmdroid/osmdroid) (Apache 2.0).
+Satellite imagery © Esri, Maxar, Earthstar Geographics; topographic and street maps © Esri and
+contributors; OpenStreetMap © OpenStreetMap contributors. Tile servers have their own terms of use;
+this app is meant for personal, low-volume use and limits the size of offline downloads.

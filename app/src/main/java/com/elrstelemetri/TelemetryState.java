@@ -1,6 +1,6 @@
 package com.elrstelemetri;
 
-/** Son gelen telemetri değerleri. Erişim `synchronized (state)` ile yapılır. */
+/** Latest telemetry values. Access with `synchronized (state)`. */
 public class TelemetryState {
 
     // Link
@@ -8,7 +8,7 @@ public class TelemetryState {
     public int downRssi, downLq, downSnr;
     public long linkTime;
 
-    // Batarya
+    // Battery
     public double voltage, current;
     public int mah, batteryPct;
     public long batteryTime;
@@ -26,17 +26,17 @@ public class TelemetryState {
     public double pitchDeg, rollDeg, yawDeg;
     public long attitudeTime;
 
-    // Uçuş modu
+    // Flight mode
     public String flightMode = "";
     public long modeTime;
 
-    // Ev noktası (ilk sağlam GPS fix'inde alınır)
+    // Home position (taken at the first solid GPS fix)
     public static final int HOME_MIN_SATS = 6;
     public boolean homeSet;
     public double homeLat, homeLon;
     public int homeAltM;
 
-    // İstatistik
+    // Statistics
     public long frameCount, datagramCount, lastDatagramTime;
     public String lastSource = "";
     public boolean mavlinkSuspect;
@@ -55,7 +55,7 @@ public class TelemetryState {
         updateHome();
     }
 
-    /** Ev noktasına uzaklık (metre), haversine. */
+    /** Distance to home in metres (haversine). */
     public double homeDistanceM() {
         if (!homeSet) return Double.NaN;
         double r = 6371000.0;
@@ -67,7 +67,7 @@ public class TelemetryState {
         return 2 * r * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
-    /** Evden uçağa yön (derece, 0 = kuzey). */
+    /** Bearing from home to the aircraft (degrees, 0 = north). */
     public double homeBearingDeg() {
         if (!homeSet) return Double.NaN;
         double p1 = Math.toRadians(homeLat), p2 = Math.toRadians(lat);
@@ -77,7 +77,7 @@ public class TelemetryState {
         return (Math.toDegrees(Math.atan2(y, x)) + 360) % 360;
     }
 
-    /** Hücre sayısı tahmini (LiPo, hücre başı en fazla 4.35 V). */
+    /** Estimated cell count (LiPo, at most 4.35 V per cell). */
     public int cellCount() {
         if (voltage < 2.5) return 0;
         return (int) Math.ceil(voltage / 4.35);

@@ -12,9 +12,10 @@ import java.net.DatagramSocket;
 import java.util.Objects;
 
 /**
- * Backpack WiFi'ında internet yoktur. Telefon bu ağa bağlıyken harita karolarının inebilmesi için
- * uygulamanın internet trafiği mobil veriye yönlendirilir; telemetri UDP soketi ise WiFi'a bağlanır.
- * WiFi'da internet varsa (ör. evde test) hiçbir yönlendirme yapılmaz.
+ * The backpack WiFi has no internet. While the phone is on that network, the app's internet
+ * traffic (map tiles) is routed over mobile data when it is available, and the telemetry UDP
+ * socket is bound to WiFi. If there is no mobile data the map runs from the offline tile cache.
+ * Nothing is rerouted when the WiFi itself has internet (e.g. testing at home).
  */
 public final class NetRouter {
 
@@ -77,7 +78,7 @@ public final class NetRouter {
                     .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
                     .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), cellCb);
         } catch (RuntimeException e) {
-            // İzin/sistem kısıtı: yönlendirme olmadan devam et
+            // permission or system restriction: continue without routing
         }
     }
 
@@ -107,21 +108,25 @@ public final class NetRouter {
         });
     }
 
-    /** Telemetri soketini (varsa) WiFi ağına bağlar. */
+    /** Binds the telemetry socket to the WiFi network, if there is one. */
     public void bindToWifi(DatagramSocket s) {
         Network w = wifi;
         if (w == null) return;
         try {
             w.bindSocket(s);
         } catch (Exception ignored) {
-            // bağlanamazsa varsayılan yönlendirmeyle dinlemeye devam eder
+            // if binding fails, keep listening on the default route
         }
     }
 
+    public boolean hasInternet() {
+        return bound != null || (wifi != null && wifiValidated) || (wifi == null && cellular != null);
+    }
+
     public String describe() {
-        if (bound != null) return "harita: mobil veri";
-        if (wifi != null && wifiValidated) return "WiFi (internetli)";
-        if (wifi != null) return cellular == null ? "harita: internet yok" : "WiFi";
-        return "WiFi yok";
+        if (bound != null) return "map: mobile data";
+        if (wifi != null && wifiValidated) return "map: WiFi internet";
+        if (wifi != null) return "map: offline cache";
+        return cellular != null ? "no WiFi" : "no network";
     }
 }

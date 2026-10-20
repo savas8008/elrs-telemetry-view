@@ -1,4 +1,4 @@
-name: APK derle
+name: Build APK
 
 on:
   push:
@@ -17,11 +17,11 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Test ve debug APK
+      - name: Tests and debug APK
         run: |
           set -o pipefail
           ./gradlew --no-daemon testDebugUnitTest assembleDebug 2>&1 | tee gradle.log
-      - name: Hata özeti (annotation)
+      - name: Error summary (annotation)
         if: failure()
         run: |
           L=$(grep -n -m1 -E "FAILED|What went wrong" gradle.log | cut -d: -f1)
@@ -32,7 +32,7 @@ jobs:
           for c in chunks:
               print('::error title=gradle::' + c.replace('%', '%25').replace('\r', '').replace('\n', '%0A'))
           PY
-      - name: GCS ekran görüntüsü (Robolectric)
+      - name: Screenshots (Robolectric)
         continue-on-error: true
         run: |
           set -o pipefail
@@ -42,20 +42,21 @@ jobs:
           L=[l for l in open('shot.log',errors='replace').read().splitlines() if re.search(r'FAILED|Exception|Caused by|at com\.elrstelemetri|at org\.osmdroid|error', l)][:40]
           for i in range(0,len(L),10): print('::warning title=screenshot::'+'%0A'.join(x.replace('%','%25') for x in L[i:i+10]))
           "; exit 1; }
-      - name: APK'yı yeniden adlandır
-        run: cp app/build/outputs/apk/debug/app-debug.apk ELRS-Telemetri-${{ github.run_number }}.apk
+      - name: Rename APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk ELRS-Telemetry-${{ github.run_number }}.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: ELRS-Telemetri-apk
-          path: ELRS-Telemetri-${{ github.run_number }}.apk
-      - name: Release olarak yayınla
+          name: ELRS-Telemetry-apk
+          path: ELRS-Telemetry-${{ github.run_number }}.apk
+      - name: Publish release
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "build-${{ github.run_number }}" \
-            "ELRS-Telemetri-${{ github.run_number }}.apk" \
-            $( [ -f app/build/screenshots/gcs.png ] && echo "app/build/screenshots/gcs.png#ekran-goruntusu.png" ) \
-            --title "ELRS Telemetri - derleme ${{ github.run_number }}" \
-            --notes "Otomatik derleme (${{ github.sha }}). APK'yı indirip telefona kurun." \
+            "ELRS-Telemetry-${{ github.run_number }}.apk" \
+            $( [ -f app/build/screenshots/gcs.png ] && echo "app/build/screenshots/gcs.png#screenshot-gcs.png" ) \
+            $( [ -f app/build/screenshots/settings.png ] && echo "app/build/screenshots/settings.png#screenshot-settings.png" ) \
+            --title "ELRS Telemetry - build ${{ github.run_number }}" \
+            --notes "Automatic build (${{ github.sha }}). Download the APK and install it on your phone or tablet." \
             --latest

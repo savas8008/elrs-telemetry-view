@@ -3,6 +3,7 @@ package com.elrstelemetri;
 import static org.junit.Assume.assumeTrue;
 import static org.robolectric.Shadows.shadowOf;
 
+import android.app.Dialog;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -26,9 +27,9 @@ import java.net.InetAddress;
 import java.time.Duration;
 
 /**
- * GCS ekranının görüntüsünü alır: uygulama başlatılır, localhost'a backpack biçiminde
- * (MSP v2 içinde CRSF) UDP paketleri gönderilir, ekran PNG'ye çizilir.
- * Yalnızca -Pscreenshots=true ile çalışır.
+ * Renders the GCS screen and the settings screen to PNG: the app is started, backpack-style
+ * UDP packets (CRSF inside MSP v2) are sent to localhost, then the views are drawn to bitmaps.
+ * Only runs with -Pscreenshots=true.
  */
 @RunWith(RobolectricTestRunner.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -53,20 +54,37 @@ public class GcsScreenshotTest {
         return CrsfParserTest.be(v, n);
     }
 
+    static void render(View root, int w, int h, String name) throws Exception {
+        root.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, w, h);
+        Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        root.draw(new Canvas(bmp));
+        File out = new File("build/screenshots/" + name);
+        out.getParentFile().mkdirs();
+        try (FileOutputStream fo = new FileOutputStream(out)) {
+            bmp.compress(Bitmap.CompressFormat.PNG, 100, fo);
+        }
+        System.out.println("Screenshot: " + out.getAbsolutePath() + " " + w + "x" + h);
+    }
+
     @Test
-    public void gcsEkrani() throws Exception {
+    public void gcsScreen() throws Exception {
         assumeTrue(Boolean.getBoolean("screenshots"));
 
         Context ctx = RuntimeEnvironment.getApplication();
-        ctx.getSharedPreferences("ayarlar", Context.MODE_PRIVATE).edit()
-                .putBoolean("autoRecord", false).putBoolean("voice", false).apply();
+        ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit()
+                .putBoolean("autoRecord", false).putBoolean("voice", false).putBoolean("vibrate", false)
+                // low max-altitude threshold so the screenshot shows an active alarm
+                .putLong("alarm.max_alt.value", Double.doubleToLongBits(110))
+                .apply();
 
         ActivityController<MainActivity> ctl = Robolectric.buildActivity(MainActivity.class).setup();
         MainActivity a = ctl.get();
 
         DatagramSocket tx = new DatagramSocket();
         InetAddress lo = InetAddress.getLoopbackAddress();
-        double homeLat = 37.0742, homeLon = 36.2464;  // Osmaniye
+        double homeLat = 37.0742, homeLon = 36.2464;
         for (int i = 0; i < 40; i++) {
             double t = i / 40.0;
             double lat = homeLat + 0.0025 * Math.sin(t * 5) + 0.002 * t;
@@ -79,7 +97,7 @@ public class GcsScreenshotTest {
                     crsf(CrsfParser.ATTITUDE, CrsfParserTest.join(be(1047, 2), be((-2618) & 0xFFFF, 2), be(10821, 2))),
                     crsf(CrsfParser.FLIGHT_MODE, 'A', 'N', 'G', 'L', 0),
                     crsf(CrsfParser.VARIO, be(140, 2)),
-                    crsf(CrsfParser.BARO_ALT, be(10000 + 1180 + i * 10, 2)),
+                    crsf(CrsfParser.BARO_ALT, be(10000 + 1080 + i * 10, 2)),
             };
             for (byte[] f : frames) {
                 byte[] dg = msp(f);
@@ -95,18 +113,13 @@ public class GcsScreenshotTest {
         View root = a.getWindow().getDecorView();
         int w = root.getWidth() > 0 ? root.getWidth() : 1640;
         int h = root.getHeight() > 0 ? root.getHeight() : 780;
-        root.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
-        root.layout(0, 0, w, h);
-        Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-        root.draw(new Canvas(bmp));
+        render(root, w, h, "gcs.png");
 
-        File out = new File("build/screenshots/gcs.png");
-        out.getParentFile().mkdirs();
-        try (FileOutputStream fo = new FileOutputStream(out)) {
-            bmp.compress(Bitmap.CompressFormat.PNG, 100, fo);
-        }
-        System.out.println("Ekran görüntüsü: " + out.getAbsolutePath() + " " + w + "x" + h);
+        Dialog settings = a.showSettings();
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(300));
+        render(settings.getWindow().getDecorView(), w, h, "settings.png");
+        settings.dismiss();
+
         ctl.pause().stop().destroy();
     }
 }

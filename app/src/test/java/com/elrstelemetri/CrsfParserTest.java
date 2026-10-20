@@ -9,7 +9,7 @@ import org.junit.Test;
 
 public class CrsfParserTest {
 
-    /** Test için CRSF çerçevesi üretir: [0xEA][len][type][payload][crc]. */
+    /** Builds a CRSF frame for tests: [0xEA][len][type][payload][crc]. */
     static byte[] frame(int type, int... payload) {
         byte[] f = new byte[payload.length + 4];
         f[0] = (byte) 0xEA;
@@ -41,7 +41,7 @@ public class CrsfParserTest {
         return r;
     }
 
-    // Osmaniye civarı örnek konum
+    // sample position
     static byte[] gpsFrame(double lat, double lon, int sats) {
         return frame(CrsfParser.GPS, join(
                 be(Math.round(lat * 1e7), 4), be(Math.round(lon * 1e7), 4),
@@ -52,14 +52,14 @@ public class CrsfParserTest {
     }
 
     @Test
-    public void crcBilinenDeger() {
+    public void crcKnownValue() {
         // Betaflight/ELRS crc8_dvb_s2: "123456789" → 0xBC
         byte[] d = "123456789".getBytes();
         assertEquals(0xBC, CrsfParser.crc8(d, 0, d.length));
     }
 
     @Test
-    public void tumTipleriCozer() {
+    public void decodesAllTypes() {
         TelemetryState s = new TelemetryState();
         CrsfParser p = new CrsfParser(s);
         byte[] dg = cat(
@@ -100,11 +100,11 @@ public class CrsfParserTest {
     }
 
     @Test
-    public void copVeBozukCrcAtlanir() {
+    public void skipsGarbageAndBadCrc() {
         TelemetryState s = new TelemetryState();
         CrsfParser p = new CrsfParser(s);
         byte[] bad = frame(CrsfParser.BATTERY, join(be(111, 2), be(0, 2), be(0, 3), new int[]{0}));
-        bad[5] ^= 0x55;  // CRC bozulur
+        bad[5] ^= 0x55;  // corrupts the CRC
         byte[] good = frame(CrsfParser.BATTERY, join(be(252, 2), be(0, 2), be(0, 3), new int[]{50}));
         byte[] dg = cat(new byte[]{1, 2, 3, (byte) 0xFD, 9, 0, 0}, bad, new byte[]{0x55, (byte) 0xAA}, good);
         assertEquals(1, p.feed(dg, dg.length));
@@ -112,7 +112,7 @@ public class CrsfParserTest {
     }
 
     @Test
-    public void ikiDatagramaBolunenCerceve() {
+    public void frameSplitAcrossDatagrams() {
         TelemetryState s = new TelemetryState();
         CrsfParser p = new CrsfParser(s);
         byte[] f = gpsFrame(37.1, 36.2, 10);
@@ -124,23 +124,23 @@ public class CrsfParserTest {
     }
 
     @Test
-    public void evUzakligi() {
+    public void homeDistance() {
         TelemetryState s = new TelemetryState();
         CrsfParser p = new CrsfParser(s);
         byte[] f1 = gpsFrame(37.0, 36.0, 8);
         p.feed(f1, f1.length);
-        byte[] f2 = gpsFrame(37.009, 36.0, 8);  // ~1 km kuzey
+        byte[] f2 = gpsFrame(37.009, 36.0, 8);  // ~1 km north
         p.feed(f2, f2.length);
         assertEquals(1000.8, s.homeDistanceM(), 2.0);
         assertEquals(0.0, s.homeBearingDeg(), 0.5);
     }
 
     /**
-     * Backpack'in gerçek UDP biçimi (Backpack Tx_main.cpp / msp.cpp):
-     * '$' 'X' '<' flags func(LE16=0x0011) size(LE16) [tam CRSF çerçevesi] crc8
+     * The backpack's real UDP format (Backpack Tx_main.cpp / msp.cpp):
+     * '$' 'X' '<' flags func(LE16=0x0011) size(LE16) [complete CRSF frame] crc8
      */
     @Test
-    public void backpackMspSarmaliUdpPaketi() {
+    public void backpackMspWrappedUdpPacket() {
         TelemetryState s = new TelemetryState();
         CrsfParser p = new CrsfParser(s);
         byte[] crsf = frame(CrsfParser.LINK_STATS, 40, 45, 100, 8, 0, 7, 2, 50, 100, 7);

@@ -2,6 +2,7 @@ package com.elrstelemetri;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
@@ -11,20 +12,16 @@ import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.InputType;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.RadioButton;
-import android.widget.RadioGroup;
-import android.widget.ScrollView;
-import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import org.osmdroid.tileprovider.cachemanager.CacheManager;
 
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -37,10 +34,11 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-public class MainActivity extends Activity {
+public class MainActivity extends Activity implements SettingsDialog.Host {
 
     private static final long STALE_MS = 3000;
     private static final long LOG_CLOSE_AFTER_MS = 30000;
+    private static final long MUTE_MS = 120000;
 
     private static final int C_TEXT = Color.rgb(235, 238, 242);
     private static final int C_LABEL = Color.rgb(140, 150, 165);
@@ -76,12 +74,15 @@ public class MainActivity extends Activity {
     private long lastTrackGpsTime;
     private long rateStart, rateCount;
     private double rate;
+    private String downloadStatus = "";
+    private boolean downloading;
 
-    // Hesaplanan anlık değerler (UI iş parçacığı)
+    // Derived values (UI thread)
     private double curRelAlt = Double.NaN, curHeading, curDist = Double.NaN, curCell = Double.NaN;
     private boolean curArmedKnown, curArmed;
+    private String activeAlarmIds = "";
 
-    // Görünümler
+    // Views
     private LinearLayout leftPanel, rightPanel;
     private TextView tMode, tArm, tTimer, tLq, tRssi, tSats, tRec, tLink, tWarn, tInfo;
     private TextView vAlt, vVario, vSpeed, vDist, vHomeDir, vGpsAlt;
@@ -95,7 +96,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        prefs = getSharedPreferences("ayarlar", MODE_PRIVATE);
+        prefs = getSharedPreferences("settings", MODE_PRIVATE);
         settings.load(prefs);
         recordEnabled = settings.autoRecord;
 
@@ -103,12 +104,12 @@ public class MainActivity extends Activity {
         map = new GcsMap(this, getResources().getDisplayMetrics().density);
         map.setMapType(settings.mapType);
         if (settings.hasLastPos) map.startAt(settings.lastLat, settings.lastLon, 15.0);
-        else map.startAt(39.0, 35.0, 6.0);  // konum yoksa Türkiye
+        else map.startAt(30.0, 10.0, 3.0);
         map.setOnFollowChanged(this::updateFollowButton);
 
         logger = new FlightLogger(this);
         alerts = new Alerts(this);
-        // Ağ yönlendirmesi değişince UDP soketini doğru ağa yeniden bağla
+        // Re-bind the UDP socket when the network routing changes
         router = new NetRouter(this, () -> {
             if (running) {
                 stopReceiver();
@@ -150,9 +151,9 @@ public class MainActivity extends Activity {
     protected void onStart() {
         super.onStart();
         WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-        mcLock = wm.createMulticastLock("elrs-telem");
+        mcLock = wm.createMulticastLock("elrs-telemetry");
         mcLock.setReferenceCounted(false);
-        mcLock.acquire();  // bazı telefonlar broadcast paketlerini bu kilit olmadan düşürür
+        mcLock.acquire();  // some phones drop broadcast packets without this lock
         router.start();
         startReceiver();
         ui.post(tick);
@@ -213,7 +214,7 @@ public class MainActivity extends Activity {
                     if (rawEnabled) addRaw(buf, n, frames);
                 }
             } catch (Exception e) {
-                if (running) netStatus = "Hata: " + e.getMessage();
+                if (running) netStatus = "Error: " + e.getMessage();
             } finally {
                 if (s != null) s.close();
             }
@@ -236,7 +237,7 @@ public class MainActivity extends Activity {
 
     private void addRaw(byte[] b, int n, int frames) {
         StringBuilder sb = new StringBuilder();
-        sb.append(n).append("B ").append(frames).append("çrç: ");
+        sb.append(n).append("B ").append(frames).append(" frm: ");
         int show = Math.min(n, 40);
         for (int i = 0; i < show; i++) sb.append(String.format("%02X ", b[i] & 0xFF));
         if (n > show) sb.append('…');
@@ -246,7 +247,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    // ================================================================ Güncelleme döngüleri
+    // ================================================================ Update loops
 
     private final Runnable tick = new Runnable() {
         @Override
@@ -270,12 +271,15 @@ public class MainActivity extends Activity {
 
     private void refresh() {
         long now = System.currentTimeMillis();
-        List<String> warnings = new ArrayList<>();
-        boolean critical = false;
+        List<String> notices = new ArrayList<>();
+        List<String> alarmLines = new ArrayList<>();
         boolean linkFresh;
+        AlarmSet al = settings.alarms;
         synchronized (state) {
             TelemetryState s = state;
-            linkFresh = fresh(s.linkTime, now) || fresh(s.batteryTime, now) || fresh(s.gpsTime, now);
+            long lastTelemetry = Math.max(s.linkTime, Math.max(s.batteryTime, s.gpsTime));
+            linkFresh = fresh(lastTelemetry, now);
+            boolean ls = !fresh(s.linkTime, now);
             boolean gpsFresh = fresh(s.gpsTime, now);
             boolean attFresh = fresh(s.attitudeTime, now);
             boolean battFresh = fresh(s.batteryTime, now);
@@ -283,39 +287,66 @@ public class MainActivity extends Activity {
             boolean hasFix = s.gpsTime != 0 && s.sats >= 4 && (s.lat != 0 || s.lon != 0);
             if (linkFresh) hadData = true;
 
-            // Paket hızı
+            // Packet rate
             if (rateStart == 0 || now - rateStart >= 1000) {
                 if (rateStart != 0) rate = (s.datagramCount - rateCount) * 1000.0 / (now - rateStart);
                 rateStart = now;
                 rateCount = s.datagramCount;
             }
 
-            // Yön: GPS hızı yeterliyse GPS rotası, değilse attitude yaw
+            // Heading: GPS course when moving, otherwise attitude yaw
             if (gpsFresh && s.groundSpeedKmh > 3) curHeading = s.headingDeg;
             else if (attFresh) curHeading = s.yawDeg;
             else if (gpsFresh) curHeading = s.headingDeg;
 
-            // Göreli irtifa: baro varsa baro (FC kalkışa göre sıfırlar), yoksa GPS - ev
+            // Relative altitude: baro if available (FC zeroes it at arming), else GPS minus home
             if (baroFresh) curRelAlt = s.baroAltM;
             else if (gpsFresh && s.homeSet) curRelAlt = s.gpsAltM - s.homeAltM;
             else if (!linkFresh) curRelAlt = Double.NaN;
+            boolean altValid = !Double.isNaN(curRelAlt) && (baroFresh || gpsFresh);
 
             curDist = s.homeDistanceM();
             int cells = s.cellCount();
             curCell = cells > 0 ? s.voltage / cells : Double.NaN;
 
-            // ARM durumu: Betaflight/INAV disarm iken uçuş modunun sonuna '*' ekler
+            // Arm state: Betaflight/INAV append '*' to the flight mode while disarmed
             String mode = s.flightMode == null ? "" : s.flightMode.trim();
             curArmedKnown = fresh(s.modeTime, now) && !mode.isEmpty();
             curArmed = curArmedKnown && !mode.endsWith("*");
             boolean flying = linkFresh && (!curArmedKnown || curArmed);
 
-            stats.update(now, flying, curRelAlt, gpsFresh ? curDist : Double.NaN,
+            stats.update(now, flying, altValid ? curRelAlt : Double.NaN, gpsFresh ? curDist : Double.NaN,
                     gpsFresh ? s.groundSpeedKmh : Double.NaN,
                     battFresh ? curCell : Double.NaN, battFresh ? s.voltage : Double.NaN,
                     battFresh ? s.current : Double.NaN);
 
-            // Harita
+            // ---- Alarms
+            int bestRssi = s.rssi2 != 0 ? Math.max(s.rssi1, s.rssi2) : s.rssi1;
+            al.get(AlarmSet.LOW_CELL).evaluate(curCell, battFresh && cells > 0, flying);
+            al.get(AlarmSet.LOW_BATTERY_PCT).evaluate(s.batteryPct, battFresh && s.batteryPct > 0, flying);
+            al.get(AlarmSet.LOW_LQ).evaluate(s.lq, !ls, flying);
+            al.get(AlarmSet.LOW_RSSI).evaluate(bestRssi, !ls && s.rssi1 != 0, flying);
+            al.get(AlarmSet.TELEMETRY_LOST).evaluate((now - lastTelemetry) / 1000.0, hadData, flying);
+            al.get(AlarmSet.MIN_ALT).evaluate(curRelAlt, altValid, flying);
+            al.get(AlarmSet.MAX_ALT).evaluate(curRelAlt, altValid, flying);
+            al.get(AlarmSet.MIN_SPEED).evaluate(s.groundSpeedKmh, gpsFresh, flying);
+            al.get(AlarmSet.MAX_SPEED).evaluate(s.groundSpeedKmh, gpsFresh, flying);
+            al.get(AlarmSet.MAX_DISTANCE).evaluate(curDist, gpsFresh && s.homeSet, flying);
+            al.get(AlarmSet.LOW_SATS).evaluate(s.sats, gpsFresh, flying);
+            StringBuilder ids = new StringBuilder();
+            for (AlarmSet.Alarm a : al.all()) {
+                if (a.active) {
+                    alarmLines.add(a.title.toUpperCase(Locale.US) + "  " + a.format(a.value) + " " + a.unit);
+                    alerts.alarm(a.id, a.speech, settings.alarmRepeatSec * 1000L, settings.voice, settings.vibrate);
+                    if (ids.length() > 0) ids.append(' ');
+                    ids.append(a.id);
+                } else {
+                    alerts.clear(a.id);
+                }
+            }
+            activeAlarmIds = ids.toString();
+
+            // ---- Map
             if (hasFix && s.gpsTime != lastTrackGpsTime) {
                 lastTrackGpsTime = s.gpsTime;
                 map.addTrackPoint(s.lat, s.lon);
@@ -325,44 +356,48 @@ public class MainActivity extends Activity {
             }
             map.update(hasFix, s.lat, s.lon, curHeading, !gpsFresh, s.homeSet, s.homeLat, s.homeLon);
 
-            // ---- Üst çubuk
-            String modeTxt = mode.isEmpty() ? "MOD —" : mode.replace("*", "");
-            setText(tMode, modeTxt, C_TEXT, !fresh(s.modeTime, now));
+            // ---- Top bar
+            setText(tMode, mode.isEmpty() ? "MODE —" : mode.replace("*", ""), C_TEXT, !fresh(s.modeTime, now));
             if (!curArmedKnown) styleChip(tArm, "ARM ?", C_STALE);
             else styleChip(tArm, curArmed ? "ARMED" : "DISARMED", curArmed ? C_BAD : C_OK);
             tTimer.setText("⏱ " + FlightStats.formatDuration(stats.flightMs));
 
-            boolean ls = !fresh(s.linkTime, now);
-            setText(tLq, "LQ " + s.lq + "%", s.lq < settings.warnLq ? C_BAD : s.lq < 80 ? C_WARN : C_OK, ls);
-            setText(tRssi, s.rssi1 + "/" + s.rssi2 + " dBm", s.rssi1 < -100 ? C_WARN : C_TEXT, ls);
-            setText(tSats, "🛰 " + s.sats, s.sats < 6 ? C_WARN : C_OK, !gpsFresh);
+            boolean lqAlarm = al.isActive(AlarmSet.LOW_LQ);
+            setText(tLq, "LQ " + s.lq + "%", lqAlarm ? C_BAD : s.lq < 80 ? C_WARN : C_OK, ls);
+            setText(tRssi, s.rssi1 + "/" + s.rssi2 + " dBm", al.isActive(AlarmSet.LOW_RSSI) ? C_BAD : C_TEXT, ls);
+            setText(tSats, "🛰 " + s.sats, al.isActive(AlarmSet.LOW_SATS) ? C_BAD : C_OK, !gpsFresh);
             if (logger.isOpen()) {
                 styleChip(tRec, "● REC " + FlightStats.formatDuration(now - logger.startTime), C_BAD);
             } else {
-                styleChip(tRec, recordEnabled ? "○ REC bekliyor" : "○ REC kapalı", C_STALE);
+                styleChip(tRec, recordEnabled ? "○ REC armed" : "○ REC off", C_STALE);
             }
             String link;
-            if (s.lastDatagramTime == 0) link = netStatus + " · veri yok · " + router.describe();
+            if (s.lastDatagramTime == 0) link = netStatus + " · no data · " + router.describe();
             else link = String.format(Locale.US, "%s · %.0f p/s · %s", s.lastSource, rate, router.describe());
             tLink.setText(link);
             tLink.setTextColor(fresh(s.lastDatagramTime, now) ? C_LABEL : C_BAD);
 
-            // ---- Sol panel
+            // ---- Left panel
             horizon.set(s.pitchDeg, s.rollDeg, curHeading, !attFresh);
-            setText(vAlt, Double.isNaN(curRelAlt) ? "—" : String.format(Locale.US, "%.0f m", curRelAlt), C_TEXT,
-                    !(baroFresh || gpsFresh));
+            boolean altAlarm = al.isActive(AlarmSet.MIN_ALT) || al.isActive(AlarmSet.MAX_ALT);
+            setText(vAlt, Double.isNaN(curRelAlt) ? "—" : String.format(Locale.US, "%.0f m", curRelAlt),
+                    altAlarm ? C_BAD : C_TEXT, !altValid);
             setText(vVario, String.format(Locale.US, "%+.1f m/s", s.varioMs), varioColor(s.varioMs),
                     !fresh(s.varioTime, now));
-            setText(vSpeed, String.format(Locale.US, "%.0f km/sa", s.groundSpeedKmh), C_TEXT, !gpsFresh);
-            setText(vDist, Double.isNaN(curDist) ? "ev yok" : formatDist(curDist), C_TEXT, !gpsFresh);
+            boolean spdAlarm = al.isActive(AlarmSet.MIN_SPEED) || al.isActive(AlarmSet.MAX_SPEED);
+            setText(vSpeed, String.format(Locale.US, "%.0f km/h", s.groundSpeedKmh), spdAlarm ? C_BAD : C_TEXT, !gpsFresh);
+            setText(vDist, Double.isNaN(curDist) ? "no home" : formatDist(curDist),
+                    al.isActive(AlarmSet.MAX_DISTANCE) ? C_BAD : C_TEXT, !gpsFresh);
             double homeDir = Double.isNaN(curDist) ? Double.NaN : (s.homeBearingDeg() + 180) % 360;
             setText(vHomeDir, Double.isNaN(homeDir) ? "—" : String.format(Locale.US, "%03.0f° %s", homeDir, arrow(homeDir - curHeading)),
                     C_ACCENT, !gpsFresh);
             setText(vGpsAlt, s.gpsAltM + " m", C_TEXT, !gpsFresh);
 
-            // ---- Sağ panel
-            int battColor = Double.isNaN(curCell) ? C_STALE
-                    : curCell < settings.warnCellV ? C_BAD : curCell < settings.warnCellV + 0.2 ? C_WARN : C_OK;
+            // ---- Right panel
+            double warnCell = al.get(AlarmSet.LOW_CELL).threshold;
+            boolean battAlarm = al.isActive(AlarmSet.LOW_CELL) || al.isActive(AlarmSet.LOW_BATTERY_PCT);
+            int battColor = battAlarm ? C_BAD : Double.isNaN(curCell) ? C_OK
+                    : curCell < warnCell + 0.2 ? C_WARN : C_OK;
             float frac = s.batteryPct > 0 ? s.batteryPct / 100f
                     : Double.isNaN(curCell) ? 0 : (float) ((curCell - 3.3) / (4.2 - 3.3));
             battery.set(frac, String.format(Locale.US, "%.1fV  %d%%", s.voltage, s.batteryPct), battColor, !battFresh);
@@ -377,60 +412,51 @@ public class MainActivity extends Activity {
             sparkAlt.set(stats.altHistory, stats.historyCount, stats.historyPos);
             sparkVolt.set(stats.voltHistory, stats.historyCount, stats.historyPos);
 
-            // ---- Alt bilgi
+            // ---- Bottom info
             StringBuilder info = new StringBuilder();
             if (hasFix) info.append(String.format(Locale.US, "%.6f, %.6f", s.lat, s.lon));
-            else info.append("GPS konumu yok");
-            if (logger.isOpen()) info.append("   ·   ").append(logger.fileName).append(" (").append(logger.rows).append(" satır)");
+            else info.append("No GPS position");
+            if (logger.isOpen()) info.append("\n").append(logger.fileName).append(" (").append(logger.rows).append(" rows)");
+            if (downloading) info.append("\n").append(downloadStatus);
             tInfo.setText(info);
 
-            // ---- Uyarılar
+            // ---- Notices (not alarms)
             if (s.lastDatagramTime == 0) {
-                warnings.add("Telemetri bekleniyor — tablet backpack WiFi'ına bağlı mı? Lua: Backpack › Telemetry = WiFi");
+                notices.add("Waiting for telemetry — is this device on the backpack WiFi? Radio: Backpack › Telemetry = WiFi");
             } else if (s.mavlinkSuspect) {
-                warnings.add("MAVLink verisi geliyor — Link Mode = Normal olmalı");
+                notices.add("Receiving MAVLink — set Link Mode = Normal on the radio");
             } else if (s.datagramCount > 20 && s.frameCount == 0) {
-                warnings.add("Paket geliyor ama CRSF çerçevesi yok — Ayarlar › Ham veri");
+                notices.add("Packets arrive but contain no CRSF frames — Settings › Show raw UDP data");
             }
-            if (hadData && !linkFresh) {
-                warnings.add("TELEMETRİ KAYIP");
-                critical = true;
-                speak("lost", "Telemetri kayboldu");
-            } else alerts.clear("lost");
-            if (!ls && s.lq < settings.warnLq) {
-                warnings.add("ZAYIF BAĞLANTI · LQ " + s.lq + "%");
-                critical = true;
-                speak("lq", "Bağlantı zayıf");
-            } else alerts.clear("lq");
-            if (battFresh && !Double.isNaN(curCell) && curCell < settings.warnCellV) {
-                warnings.add(String.format(Locale.US, "DÜŞÜK BATARYA · %.2f V/hücre", curCell));
-                critical = true;
-                speak("batt", "Batarya düşük");
-            } else alerts.clear("batt");
-            if (gpsFresh && s.sats < 5) warnings.add("GPS ZAYIF · " + s.sats + " uydu");
         }
 
-        // Kayıt aç/kapat
+        // Logging on/off
         long lastData;
         synchronized (state) {
             lastData = state.lastDatagramTime;
         }
         if (recordEnabled && linkFresh && !logger.isOpen()) {
-            if (!logger.open()) warnings.add("Kayıt açılamadı: " + logger.lastError);
+            if (!logger.open()) notices.add("Could not start log: " + logger.lastError);
         }
         if (logger.isOpen() && (!recordEnabled || now - lastData > LOG_CLOSE_AFTER_MS)) logger.close();
 
-        if (warnings.isEmpty()) {
+        // ---- Banner
+        List<String> lines = new ArrayList<>();
+        if (!alarmLines.isEmpty() && alerts.isMuted()) {
+            lines.add("🔇 muted " + FlightStats.formatDuration(alerts.mutedRemainingMs()) + " · tap to unmute");
+        } else if (!alarmLines.isEmpty()) {
+            lines.add("tap to mute 2 min");
+        }
+        lines.addAll(alarmLines);
+        lines.addAll(notices);
+        if (lines.isEmpty()) {
             tWarn.setVisibility(View.GONE);
         } else {
             tWarn.setVisibility(View.VISIBLE);
-            tWarn.setText(String.join("\n", warnings));
-            ((GradientDrawable) tWarn.getBackground()).setColor(critical ? Color.argb(220, 200, 30, 30) : Color.argb(210, 40, 45, 55));
+            tWarn.setText(String.join("\n", lines));
+            ((GradientDrawable) tWarn.getBackground()).setColor(
+                    !alarmLines.isEmpty() ? Color.argb(225, 200, 30, 30) : Color.argb(210, 40, 45, 55));
         }
-    }
-
-    private void speak(String key, String text) {
-        if (settings.voice) alerts.say(key, text, 15000);
     }
 
     private void writeLogRow() {
@@ -442,14 +468,15 @@ public class MainActivity extends Activity {
             if (!fresh(s.lastDatagramTime, now)) return;
             int cells = s.cellCount();
             row = String.format(Locale.US,
-                    "%s,%d,%.7f,%.7f,%d,%s,%.1f,%.2f,%.1f,%.1f,%d,%.1f,%.1f,%.1f,%.2f,%s,%.2f,%d,%d,%.1f,%d,%d,%d,%d,%d,%d,%d,%s,%s,%s",
+                    "%s,%d,%.7f,%.7f,%d,%s,%.1f,%.2f,%.1f,%.1f,%d,%.1f,%.1f,%.1f,%.2f,%s,%.2f,%d,%d,%.1f,%d,%d,%d,%d,%d,%d,%d,%s,%s,%s,%s",
                     isoFmt.format(new Date(now)), now - logger.startTime,
                     s.lat, s.lon, s.gpsAltM, num(curRelAlt, "%.1f"), s.baroAltM, s.varioMs, s.groundSpeedKmh,
                     s.headingDeg, s.sats, s.pitchDeg, s.rollDeg, s.yawDeg,
                     s.voltage, cells > 0 ? String.format(Locale.US, "%.3f", s.voltage / cells) : "",
                     s.current, s.mah, s.batteryPct, s.voltage * s.current,
                     s.rssi1, s.rssi2, s.lq, s.snr, s.txPowerMw, s.downRssi, s.downLq,
-                    csv(s.flightMode), num(s.homeDistanceM(), "%.1f"), num(s.homeBearingDeg(), "%.0f"));
+                    csv(s.flightMode), num(s.homeDistanceM(), "%.1f"), num(s.homeBearingDeg(), "%.0f"),
+                    csv(activeAlarmIds));
         }
         logger.write(row);
     }
@@ -471,7 +498,7 @@ public class MainActivity extends Activity {
         return v > 0.5 ? C_OK : v < -0.5 ? C_WARN : C_TEXT;
     }
 
-    /** Uçağın burnuna göre eve dönmek için hangi yöne dönmeli. */
+    /** Which way to turn, relative to the aircraft's nose, to head home. */
     private static String arrow(double rel) {
         double r = ((rel % 360) + 540) % 360 - 180;  // -180..180
         if (Math.abs(r) < 22.5) return "↑";
@@ -485,7 +512,93 @@ public class MainActivity extends Activity {
         v.setTextColor(stale ? C_STALE : color);
     }
 
-    // ================================================================ Arayüz
+    // ================================================================ Settings host
+
+    @Override
+    public Settings settings() {
+        return settings;
+    }
+
+    @Override
+    public GcsMap map() {
+        return map;
+    }
+
+    @Override
+    public void onSettingsSaved(int oldPort) {
+        map.setMapType(settings.mapType);
+        recordEnabled = settings.autoRecord;
+        settings.save(prefs);
+        if (settings.port != oldPort) {
+            stopReceiver();
+            startReceiver();
+        }
+    }
+
+    @Override
+    public void reloadSettings() {
+        settings.load(prefs);
+        map.setMapType(settings.mapType);
+    }
+
+    @Override
+    public String startOfflineDownload(int maxZoom) {
+        if (downloading) return "A download is already running";
+        if (!router.hasInternet()) {
+            return "No internet. The backpack WiFi has no internet: download offline maps before connecting "
+                    + "to it, or enable mobile data.";
+        }
+        int n = map.tilesForVisibleArea(maxZoom);
+        if (n > GcsMap.MAX_DOWNLOAD_TILES) {
+            return "Area too large (" + n + " tiles). Zoom in or choose a lower detail level.";
+        }
+        String err = map.downloadVisibleArea(maxZoom, new CacheManager.CacheManagerCallback() {
+            private int total = n;
+
+            @Override
+            public void downloadStarted() {
+                downloading = true;
+                downloadStatus = "Offline map: starting…";
+            }
+
+            @Override
+            public void setPossibleTilesInArea(int t) {
+                total = t;
+            }
+
+            @Override
+            public void updateProgress(int progress, int zoom, int zoomMin, int zoomMax) {
+                downloadStatus = String.format(Locale.US, "Offline map: %d / %d tiles (zoom %d of %d–%d)",
+                        progress, total, zoom, zoomMin, zoomMax);
+            }
+
+            @Override
+            public void onTaskComplete() {
+                downloading = false;
+                downloadStatus = "Offline map ready: " + total + " tiles";
+                ui.post(() -> Toast.makeText(MainActivity.this, downloadStatus, Toast.LENGTH_LONG).show());
+            }
+
+            @Override
+            public void onTaskFailed(int errors) {
+                downloading = false;
+                downloadStatus = "Offline map finished with " + errors + " failed tiles";
+                ui.post(() -> Toast.makeText(MainActivity.this, downloadStatus, Toast.LENGTH_LONG).show());
+            }
+        });
+        if (err == null) {
+            downloading = true;
+            downloadStatus = "Offline map: starting…";
+        }
+        return err;
+    }
+
+    @Override
+    public String downloadStatus() {
+        return downloadStatus;
+    }
+
+    // ================================================================ UI
 
     private int dp(float v) {
         return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, getResources().getDisplayMetrics()));
@@ -522,13 +635,12 @@ public class MainActivity extends Activity {
         return t;
     }
 
-    /** Etiket + değer kutusu; değer TextView'ını döndürür. */
+    /** Label + value box; returns the value TextView. */
     private TextView stat(LinearLayout row, String label, float valueSp) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(6), dp(3), dp(4), dp(3));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        row.addView(box, lp);
+        row.addView(box, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         TextView l = text(9, C_LABEL, false);
         l.setText(label);
         l.setLetterSpacing(0.08f);
@@ -583,7 +695,7 @@ public class MainActivity extends Activity {
         root.addView(map.view, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
 
-        // ---- Üst çubuk
+        // ---- Top bar
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
@@ -598,8 +710,7 @@ public class MainActivity extends Activity {
         top.addView(tArm, cl);
         tTimer = text(14, C_TEXT, true);
         top.addView(tTimer);
-        View spacer = new View(this);
-        top.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1f));
+        top.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
         tLq = text(14, C_STALE, true);
         tRssi = text(12, C_STALE, true);
         tSats = text(14, C_STALE, true);
@@ -612,7 +723,8 @@ public class MainActivity extends Activity {
         tRec = chip("○ REC");
         tRec.setOnClickListener(v -> {
             recordEnabled = !recordEnabled;
-            Toast.makeText(this, recordEnabled ? "Kayıt açık (veri gelince başlar)" : "Kayıt durduruldu", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, recordEnabled ? "Logging on (starts when telemetry arrives)" : "Logging stopped",
+                    Toast.LENGTH_SHORT).show();
         });
         top.addView(tRec, cl);
         tLink = text(10, C_LABEL, false);
@@ -621,53 +733,53 @@ public class MainActivity extends Activity {
         tlp.setMargins(dp(8), dp(6), dp(8), 0);
         root.addView(top, tlp);
 
-        // ---- Sol panel: uçuş
+        // ---- Left panel: flight
         leftPanel = panel();
         horizon = new HorizonView(this);
         leftPanel.addView(horizon, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(118)));
         LinearLayout r = row(leftPanel);
-        vAlt = stat(r, "İRTİFA", 20);
+        vAlt = stat(r, "ALTITUDE", 20);
         vVario = stat(r, "VARIO", 15);
         r = row(leftPanel);
-        vSpeed = stat(r, "HIZ", 16);
-        vDist = stat(r, "EV UZAKLIĞI", 16);
+        vSpeed = stat(r, "SPEED", 16);
+        vDist = stat(r, "HOME DIST", 16);
         r = row(leftPanel);
-        vHomeDir = stat(r, "EVE YÖN", 15);
-        vGpsAlt = stat(r, "GPS İRT (MSL)", 15);
+        vHomeDir = stat(r, "TO HOME", 15);
+        vGpsAlt = stat(r, "GPS ALT (MSL)", 15);
         FrameLayout.LayoutParams llp = new FrameLayout.LayoutParams(dp(210), FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP | Gravity.START);
         llp.setMargins(dp(8), dp(56), 0, 0);
         root.addView(leftPanel, llp);
 
-        // ---- Sağ panel: güç + bağlantı
+        // ---- Right panel: power + link
         rightPanel = panel();
         battery = new BatteryView(this);
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40));
         blp.setMargins(dp(2), dp(2), dp(2), dp(2));
         rightPanel.addView(battery, blp);
         r = row(rightPanel);
-        vCell = stat(r, "HÜCRE", 14);
-        vCurr = stat(r, "AKIM", 14);
+        vCell = stat(r, "CELL", 14);
+        vCurr = stat(r, "CURRENT", 14);
         r = row(rightPanel);
-        vMah = stat(r, "HARCANAN", 14);
-        vPower = stat(r, "GÜÇ", 14);
-        sectionTitle(rightPanel, "BAĞLANTI");
+        vMah = stat(r, "USED", 14);
+        vPower = stat(r, "POWER", 14);
+        sectionTitle(rightPanel, "LINK");
         r = row(rightPanel);
         vSnr = stat(r, "SNR", 13);
-        vTxPow = stat(r, "TX GÜÇ", 13);
+        vTxPow = stat(r, "TX POWER", 13);
         r = row(rightPanel);
         vDown = stat(r, "DOWNLINK", 12);
-        vRf = stat(r, "ANTEN / RF", 12);
-        sparkAlt = new SparklineView(this, "İRTİFA (5 dk)", "m", C_ACCENT);
+        vRf = stat(r, "ANT / RF", 12);
+        sparkAlt = new SparklineView(this, "ALTITUDE (5 min)", "m", C_ACCENT);
         rightPanel.addView(sparkAlt, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)));
-        sparkVolt = new SparklineView(this, "VOLTAJ (5 dk)", "V", Color.rgb(255, 200, 0));
+        sparkVolt = new SparklineView(this, "VOLTAGE (5 min)", "V", Color.rgb(255, 200, 0));
         rightPanel.addView(sparkVolt, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)));
         FrameLayout.LayoutParams rlp = new FrameLayout.LayoutParams(dp(210), FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP | Gravity.END);
         rlp.setMargins(0, dp(56), dp(8), 0);
         root.addView(rightPanel, rlp);
 
-        // ---- Uyarı bandı
+        // ---- Alarm / notice banner (tap to mute alarms)
         tWarn = new TextView(this);
         tWarn.setTextColor(Color.WHITE);
         tWarn.setTextSize(13);
@@ -676,16 +788,25 @@ public class MainActivity extends Activity {
         tWarn.setPadding(dp(14), dp(6), dp(14), dp(6));
         tWarn.setBackground(roundBg(Color.argb(210, 40, 45, 55), 10));
         tWarn.setVisibility(View.GONE);
+        tWarn.setOnClickListener(v -> {
+            if (alerts.isMuted()) {
+                alerts.unmute();
+                Toast.makeText(this, "Alarms unmuted", Toast.LENGTH_SHORT).show();
+            } else if (!settings.alarms.active().isEmpty()) {
+                alerts.mute(MUTE_MS);
+                Toast.makeText(this, "Alarms muted for 2 minutes", Toast.LENGTH_SHORT).show();
+            }
+        });
         FrameLayout.LayoutParams wlp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         wlp.setMargins(dp(230), dp(58), dp(230), 0);
         root.addView(tWarn, wlp);
 
-        // ---- Alt: bilgi satırı + harita düğmeleri
+        // ---- Bottom: info + map buttons
         tInfo = text(11, C_TEXT, false);
         tInfo.setSingleLine(false);
-        tInfo.setMaxLines(2);
-        tInfo.setMaxWidth(dp(210));
+        tInfo.setMaxLines(3);
+        tInfo.setMaxWidth(dp(230));
         tInfo.setPadding(dp(10), dp(4), dp(10), dp(4));
         tInfo.setBackground(roundBg(C_PANEL, 8));
         FrameLayout.LayoutParams ilp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -700,20 +821,19 @@ public class MainActivity extends Activity {
             centerOnPlane();
         });
         mapButton(buttons, "🗺", v -> {
-            settings.mapType = (settings.mapType + 1) % 3;
+            settings.mapType = (settings.mapType + 1) % Settings.MAP_NAMES.length;
             map.setMapType(settings.mapType);
-            String[] names = {"Uydu", "Sokak", "Topoğrafik"};
-            Toast.makeText(this, "Harita: " + names[settings.mapType], Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Map: " + Settings.MAP_NAMES[settings.mapType], Toast.LENGTH_SHORT).show();
         });
         mapButton(buttons, "⌂", v -> {
             synchronized (state) {
                 state.resetHome();
             }
-            Toast.makeText(this, "Ev noktası yeniden alınacak", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Home will be reset at the next GPS fix", Toast.LENGTH_SHORT).show();
         });
         mapButton(buttons, "⌫", v -> {
             map.clearTrack();
-            Toast.makeText(this, "Uçuş izi temizlendi", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Track cleared", Toast.LENGTH_SHORT).show();
         });
         mapButton(buttons, "▣", v -> {
             settings.showPanels = !settings.showPanels;
@@ -748,130 +868,32 @@ public class MainActivity extends Activity {
         }
     }
 
-    // ================================================================ Diyaloglar
+    // ================================================================ Dialogs
 
-    private AlertDialog.Builder dialog() {
-        return new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+    Dialog showSettings() {
+        return new SettingsDialog(this, this).show();
     }
 
     private void showSummary() {
         String msg = String.format(Locale.US,
-                "Uçuş süresi:  %s\nEn yüksek irtifa:  %s\nEn uzak mesafe:  %s\nEn yüksek hız:  %.0f km/sa\n"
-                        + "En yüksek akım:  %.1f A\nEn düşük hücre:  %s\nİz noktası:  %d\n\nKayıt: %s",
+                "Flight time:  %s\nMax altitude:  %s\nMax distance:  %s\nMax speed:  %.0f km/h\n"
+                        + "Max current:  %.1f A\nMin cell voltage:  %s\nTrack points:  %d\n\nLog: %s",
                 FlightStats.formatDuration(stats.flightMs),
                 Double.isNaN(stats.maxAltM) ? "—" : String.format(Locale.US, "%.0f m", stats.maxAltM),
                 formatDist(stats.maxDistM), stats.maxSpeedKmh, stats.maxCurrentA,
                 Double.isNaN(stats.minCellV) ? "—" : String.format(Locale.US, "%.2f V", stats.minCellV),
                 map.trackSize(),
-                logger.isOpen() ? "İndirilenler/" + FlightLogger.FOLDER + "/" + logger.fileName : "kapalı");
-        dialog().setTitle("Uçuş özeti")
+                logger.isOpen() ? "Downloads/" + FlightLogger.FOLDER + "/" + logger.fileName : "off");
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Flight summary")
                 .setMessage(msg)
-                .setPositiveButton("Tamam", null)
-                .setNeutralButton("Sıfırla", (d, w) -> stats.reset())
+                .setPositiveButton("OK", null)
+                .setNeutralButton("Reset", (d, w) -> stats.reset())
                 .show();
     }
 
-    private void showSettings() {
-        ScrollView sv = new ScrollView(this);
-        LinearLayout l = new LinearLayout(this);
-        l.setOrientation(LinearLayout.VERTICAL);
-        l.setPadding(dp(20), dp(8), dp(20), dp(8));
-        sv.addView(l);
-
-        l.addView(header("Harita katmanı"));
-        RadioGroup mapGroup = radio(l, new String[]{"Uydu (Esri)", "Sokak (OpenStreetMap)", "Topoğrafik (OpenTopoMap)"}, settings.mapType);
-
-        l.addView(header("Uçuş kaydı (CSV → İndirilenler/" + FlightLogger.FOLDER + ")"));
-        Switch swRec = new Switch(this);
-        swRec.setText("Veri gelince otomatik kaydet");
-        swRec.setChecked(settings.autoRecord);
-        l.addView(swRec);
-        final int[] hzValues = {1, 2, 5, 10};
-        int hzIdx = 2;
-        for (int i = 0; i < hzValues.length; i++) if (hzValues[i] == settings.recordHz) hzIdx = i;
-        RadioGroup hzGroup = radio(l, new String[]{"1 Hz", "2 Hz", "5 Hz", "10 Hz"}, hzIdx);
-        hzGroup.setOrientation(LinearLayout.HORIZONTAL);
-
-        l.addView(header("Uyarılar"));
-        Switch swVoice = new Switch(this);
-        swVoice.setText("Sesli uyarılar");
-        swVoice.setChecked(settings.voice);
-        l.addView(swVoice);
-        EditText eCell = field(l, "Düşük hücre voltajı (V)", String.format(Locale.US, "%.2f", settings.warnCellV), true);
-        EditText eLq = field(l, "Düşük LQ eşiği (%)", String.valueOf(settings.warnLq), false);
-
-        l.addView(header("Bağlantı"));
-        EditText ePort = field(l, "UDP port", String.valueOf(settings.port), false);
-
-        dialog().setTitle("Ayarlar")
-                .setView(sv)
-                .setPositiveButton("Kaydet", (d, w) -> {
-                    settings.mapType = mapGroup.indexOfChild(mapGroup.findViewById(mapGroup.getCheckedRadioButtonId()));
-                    if (settings.mapType < 0) settings.mapType = Settings.MAP_SATELLITE;
-                    map.setMapType(settings.mapType);
-                    settings.autoRecord = swRec.isChecked();
-                    recordEnabled = settings.autoRecord;
-                    int hi = hzGroup.indexOfChild(hzGroup.findViewById(hzGroup.getCheckedRadioButtonId()));
-                    settings.recordHz = hzValues[Math.max(0, hi)];
-                    settings.voice = swVoice.isChecked();
-                    try {
-                        settings.warnCellV = Float.parseFloat(eCell.getText().toString().replace(',', '.'));
-                        settings.warnLq = Integer.parseInt(eLq.getText().toString().trim());
-                        int p = Integer.parseInt(ePort.getText().toString().trim());
-                        if (p >= 1 && p <= 65535 && p != settings.port) {
-                            settings.port = p;
-                            stopReceiver();
-                            startReceiver();
-                        }
-                    } catch (NumberFormatException e) {
-                        Toast.makeText(this, "Geçersiz sayı; diğer ayarlar kaydedildi", Toast.LENGTH_LONG).show();
-                    }
-                    settings.save(prefs);
-                })
-                .setNeutralButton("Ham veri", (d, w) -> showRaw())
-                .setNegativeButton("İptal", null)
-                .show();
-    }
-
-    private TextView header(String s) {
-        TextView t = new TextView(this);
-        t.setText(s);
-        t.setTextColor(C_ACCENT);
-        t.setTypeface(Typeface.DEFAULT_BOLD);
-        t.setPadding(0, dp(14), 0, dp(4));
-        return t;
-    }
-
-    private RadioGroup radio(LinearLayout parent, String[] items, int checked) {
-        RadioGroup g = new RadioGroup(this);
-        for (int i = 0; i < items.length; i++) {
-            RadioButton b = new RadioButton(this);
-            b.setText(items[i]);
-            b.setId(View.generateViewId());
-            g.addView(b);
-            if (i == checked) b.setChecked(true);
-        }
-        parent.addView(g);
-        return g;
-    }
-
-    private EditText field(LinearLayout parent, String label, String value, boolean decimal) {
-        LinearLayout r = new LinearLayout(this);
-        r.setOrientation(LinearLayout.HORIZONTAL);
-        r.setGravity(Gravity.CENTER_VERTICAL);
-        TextView t = new TextView(this);
-        t.setText(label);
-        r.addView(t, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        EditText e = new EditText(this);
-        e.setInputType(decimal ? InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL : InputType.TYPE_CLASS_NUMBER);
-        e.setText(value);
-        e.setEms(5);
-        r.addView(e);
-        parent.addView(r);
-        return e;
-    }
-
-    private void showRaw() {
+    @Override
+    public void showRawData() {
         TextView t = new TextView(this);
         t.setTypeface(Typeface.MONOSPACE);
         t.setTextSize(10);
@@ -884,14 +906,15 @@ public class MainActivity extends Activity {
                 synchronized (rawLines) {
                     for (String s : rawLines) sb.append(s).append('\n');
                 }
-                t.setText(sb.length() == 0 ? "Henüz paket yok…" : sb.toString());
+                t.setText(sb.length() == 0 ? "No packets yet…" : sb.toString());
                 ui.postDelayed(this, 500);
             }
         };
         ui.post(upd);
-        dialog().setTitle("Ham UDP paketleri")
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Raw UDP packets")
                 .setView(t)
-                .setPositiveButton("Kapat", null)
+                .setPositiveButton("Close", null)
                 .setOnDismissListener(d -> {
                     rawEnabled = false;
                     ui.removeCallbacks(upd);

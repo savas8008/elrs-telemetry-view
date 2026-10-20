@@ -1,29 +1,29 @@
 package com.elrstelemetri;
 
-/** Uçuş süresi, uçuş boyunca en yüksek/en düşük değerler ve grafik geçmişi. Yalnızca UI iş parçacığından kullanılır. */
+/** Flight time, min/max values during the flight and chart history. UI thread only. */
 public class FlightStats {
 
-    public static final int HISTORY = 300;  // 1 sn aralıkla 5 dakika
+    public static final int HISTORY = 300;  // 5 minutes at 1 s intervals
 
     public long flightMs;
     public double maxAltM = Double.NaN, maxDistM, maxSpeedKmh, minCellV = Double.NaN, maxCurrentA;
 
     public final float[] altHistory = new float[HISTORY];
     public final float[] voltHistory = new float[HISTORY];
-    public int historyCount;  // dolu örnek sayısı
-    public int historyPos;    // bir sonraki yazılacak indeks
+    public int historyCount;  // number of filled samples
+    public int historyPos;    // next index to write
 
     private long lastUpdate;
     private long lastSample;
 
     /**
-     * @param flying    uçuş süresi sayılsın mı (link taze ve disarm değil)
-     * @param relAlt    göreli irtifa (geçersizse NaN)
-     * @param dist      ev uzaklığı (geçersizse NaN)
-     * @param speed     yer hızı km/sa (geçersizse NaN)
-     * @param cellV     hücre voltajı (geçersizse NaN)
-     * @param voltage   toplam voltaj (geçersizse NaN)
-     * @param current   akım (geçersizse NaN)
+     * @param flying    whether flight time runs (link fresh and not disarmed)
+     * @param relAlt    relative altitude (NaN if invalid)
+     * @param dist      distance to home (NaN if invalid)
+     * @param speed     ground speed km/h (NaN if invalid)
+     * @param cellV     cell voltage (NaN if invalid)
+     * @param voltage   pack voltage (NaN if invalid)
+     * @param current   current (NaN if invalid)
      */
     public void update(long now, boolean flying, double relAlt, double dist, double speed,
                        double cellV, double voltage, double current) {

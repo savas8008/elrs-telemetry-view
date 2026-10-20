@@ -7,7 +7,7 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 import android.view.View;
 
-/** Doluluk oranını renkle gösteren pil simgesi; içinde voltaj ve yüzde yazar. */
+/** Battery icon whose fill level and colour show charge; voltage and percentage inside. */
 public class BatteryView extends View {
 
     private float fraction;          // 0..1

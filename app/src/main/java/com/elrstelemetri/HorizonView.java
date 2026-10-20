@@ -8,7 +8,7 @@ import android.graphics.Path;
 import android.graphics.RectF;
 import android.view.View;
 
-/** Yapay ufuk: roll ile döner, pitch ile kayar; üstte pusula şeridi. */
+/** Artificial horizon: rotates with roll, shifts with pitch; compass tape on top. */
 public class HorizonView extends View {
 
     private float pitch, roll, heading;
@@ -56,7 +56,7 @@ public class HorizonView extends View {
     protected void onDraw(Canvas c) {
         int w = getWidth(), h = getHeight();
         float cx = w / 2f, cy = h / 2f;
-        float pxPerDeg = h / 50f;  // ±25° pitch görünür
+        float pxPerDeg = h / 50f;  // shows ±25° of pitch
 
         sky.setColor(stale ? Color.rgb(55, 58, 64) : Color.rgb(38, 120, 210));
         ground.setColor(stale ? Color.rgb(38, 38, 42) : Color.rgb(120, 78, 36));
@@ -81,11 +81,11 @@ public class HorizonView extends View {
         }
         c.restore();
 
-        // Pusula şeridi
+        // Compass tape
         float tapeH = h * 0.18f;
         c.drawRect(0, 0, w, tapeH, tape);
         text.setTextSize(tapeH * 0.45f);
-        float pxPerHdg = w / 90f;  // şeritte ±45° görünür
+        float pxPerHdg = w / 90f;  // tape shows ±45°
         for (int d = -60; d <= 60; d += 5) {
             float a = Math.round(heading / 5f) * 5 + d;
             float x = cx + (a - heading) * pxPerHdg;
@@ -94,7 +94,7 @@ public class HorizonView extends View {
             boolean major = hd % 30 == 0;
             c.drawLine(x, tapeH, x, tapeH - (major ? tapeH * 0.35f : tapeH * 0.18f), line);
             if (major) {
-                String lbl = hd == 0 ? "K" : hd == 90 ? "D" : hd == 180 ? "G" : hd == 270 ? "B" : String.valueOf(hd / 10);
+                String lbl = hd == 0 ? "N" : hd == 90 ? "E" : hd == 180 ? "S" : hd == 270 ? "W" : String.valueOf(hd / 10);
                 c.drawText(lbl, x, tapeH * 0.5f, text);
             }
         }
@@ -106,7 +106,7 @@ public class HorizonView extends View {
         tape.setColor(Color.argb(150, 0, 0, 0));
         c.drawText(hdgTxt, cx, tapeH * 0.8f, text);
 
-        // Sabit uçak sembolü
+        // Fixed aircraft symbol
         c.drawLine(cx - w * 0.22f, cy, cx - w * 0.07f, cy, plane);
         c.drawLine(cx - w * 0.07f, cy, cx - w * 0.035f, cy + h * 0.05f, plane);
         c.drawLine(cx + w * 0.07f, cy, cx + w * 0.22f, cy, plane);
@@ -115,7 +115,7 @@ public class HorizonView extends View {
 
         if (stale) {
             text.setTextSize(h / 9f);
-            c.drawText("ATTITUDE YOK", cx, cy + h * 0.3f, text);
+            c.drawText("NO ATTITUDE", cx, cy + h * 0.3f, text);
         }
         c.restore();
     }

@@ -12,7 +12,7 @@ import org.osmdroid.views.MapView;
 import org.osmdroid.views.Projection;
 import org.osmdroid.views.overlay.Overlay;
 
-/** Haritada uçak simgesi (yöne göre döner), ev noktası ve evden uçağa kesikli çizgi. */
+/** Aircraft icon (rotated to heading), home marker and a dashed line from home to the aircraft. */
 public class PlaneOverlay extends Overlay {
 
     private final float density;
@@ -34,7 +34,7 @@ public class PlaneOverlay extends Overlay {
 
     public PlaneOverlay(float density) {
         this.density = density;
-        // Üstten görünüş uçak silueti, burun -y yönünde; birim boy = 1
+        // Top-down aircraft silhouette, nose towards -y, unit length = 1
         float[][] half = {
                 {0f, -1f}, {0.09f, -0.86f}, {0.1f, -0.32f}, {0.98f, 0.02f}, {0.98f, 0.17f},
                 {0.1f, 0.06f}, {0.07f, 0.6f}, {0.36f, 0.78f}, {0.36f, 0.9f}, {0f, 0.84f}};

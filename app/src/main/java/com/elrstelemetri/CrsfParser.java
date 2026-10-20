@@ -1,18 +1,18 @@
 package com.elrstelemetri;
 
 /**
- * UDP datagramlarından CRSF telemetri çerçevelerini ayıklar.
+ * Extracts CRSF telemetry frames from UDP datagrams.
  *
- * CRSF çerçevesi: [adres][uzunluk][tip][payload...][crc8]
- *   uzunluk = tip + payload + crc bayt sayısı
- *   crc8    = DVB-S2 (polinom 0xD5), tip + payload üzerinden
+ * CRSF frame: [address][length][type][payload...][crc8]
+ *   length = type + payload + crc byte count
+ *   crc8   = DVB-S2 (polynomial 0xD5) over type + payload
  *
- * TX Backpack (Telemetry = WiFi) her CRSF çerçevesini bir MSP v2 paketine
- * sarıp UDP broadcast ile gönderir:
- *   '$' 'X' '<' flags func(0x0011, LE) size(LE) [CRSF çerçevesi] crc8
- * Ayrıştırıcı paketi bayt bayt tarar ve yalnızca CRC'si tutan, uzunluğu
- * tipine uyan CRSF çerçevelerini kabul eder; böylece MSP başlığına bağımlı olmaz.
- * Çerçeveler iki datagrama bölünürse diye artık baytlar saklanır.
+ * The TX Backpack (Telemetry = WiFi) wraps every CRSF frame in an MSP v2 packet
+ * and sends it as a UDP broadcast:
+ *   '$' 'X' '<' flags func(0x0011, LE) size(LE) [CRSF frame] crc8
+ * The parser scans byte by byte and only accepts CRSF frames whose CRC matches
+ * and whose length fits the type, so it does not depend on the MSP header.
+ * Leftover bytes are kept in case a frame is split across two datagrams.
  */
 public class CrsfParser {
 
@@ -45,7 +45,7 @@ public class CrsfParser {
         return crc;
     }
 
-    /** Tipine göre payload uzunluğu makul mü? Rastgele baytların CRC'yi tutturmasına karşı ikinci filtre. */
+    /** Is the payload length plausible for the type? A second filter against random bytes passing the CRC. */
     static boolean plausible(int type, int payloadLen) {
         switch (type) {
             case GPS: return payloadLen == 15;
@@ -59,10 +59,10 @@ public class CrsfParser {
         }
     }
 
-    /** Bir datagramı işler; bulunan geçerli çerçeve sayısını döndürür. */
+    /** Processes one datagram; returns the number of valid frames found. */
     public int feed(byte[] data, int len) {
         if (len > buf.length) len = buf.length;
-        if (bufLen + len > buf.length) bufLen = 0; // senkron kaybı: baştan başla
+        if (bufLen + len > buf.length) bufLen = 0; // lost sync: start over
         System.arraycopy(data, 0, buf, bufLen, len);
         bufLen += len;
 
@@ -70,15 +70,15 @@ public class CrsfParser {
         int i = 0;
         int keepFrom = bufLen;
         while (i + 4 <= bufLen) {
-            int frameLen = buf[i + 1] & 0xFF;          // tip + payload + crc
+            int frameLen = buf[i + 1] & 0xFF;          // type + payload + crc
             int type = buf[i + 2] & 0xFF;
             int payloadLen = frameLen - 2;
             if (frameLen < 3 || frameLen + 2 > MAX_FRAME || !plausible(type, payloadLen)) {
                 i++;
                 continue;
             }
-            int end = i + 2 + frameLen;                // crc'den sonraki indeks
-            if (end > bufLen) {                        // eksik çerçeve: sonraki datagramı bekle
+            int end = i + 2 + frameLen;                // index after the crc
+            if (end > bufLen) {                        // incomplete frame: wait for the next datagram
                 keepFrom = i;
                 break;
             }
@@ -90,7 +90,7 @@ public class CrsfParser {
                 i++;
             }
         }
-        if (keepFrom == bufLen && i < bufLen) keepFrom = i;  // son 0-3 bayt
+        if (keepFrom == bufLen && i < bufLen) keepFrom = i;  // trailing 0-3 bytes
         int rest = bufLen - keepFrom;
         System.arraycopy(buf, keepFrom, buf, 0, rest);
         bufLen = rest;
@@ -105,7 +105,7 @@ public class CrsfParser {
         return ((b[o] & 0xFF) << 24) | ((b[o + 1] & 0xFF) << 16) | ((b[o + 2] & 0xFF) << 8) | (b[o + 3] & 0xFF);
     }
 
-    // CRSF uplink TX güç kodu → mW
+    // CRSF uplink TX power code -> mW
     private static final int[] TX_POWER_MW = {0, 10, 25, 100, 500, 1000, 2000, 250, 50};
 
     private void decode(int type, byte[] b, int p, int n) {
@@ -135,7 +135,7 @@ public class CrsfParser {
                     break;
                 case BARO_ALT: {
                     int v = u16(b, p);
-                    // MSB 0: desimetre + 10000 ofset; MSB 1: metre
+                    // MSB 0: decimetres + 10000 offset; MSB 1: metres
                     state.baroAltM = (v & 0x8000) == 0 ? (v - 10000) / 10.0 : (v & 0x7FFF);
                     state.baroTime = now;
                     break;
@@ -156,7 +156,7 @@ public class CrsfParser {
                     break;
                 }
                 case ATTITUDE:
-                    // rad * 10000 → derece
+                    // rad * 10000 -> degrees
                     state.pitchDeg = Math.toDegrees(s16(b, p) / 10000.0);
                     state.rollDeg = Math.toDegrees(s16(b, p + 2) / 10000.0);
                     state.yawDeg = Math.toDegrees(s16(b, p + 4) / 10000.0);
