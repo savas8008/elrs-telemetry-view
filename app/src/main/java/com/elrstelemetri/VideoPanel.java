@@ -96,6 +96,10 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
         }
     }
 
+    public boolean isConnected() {
+        return connected;
+    }
+
     public boolean isLive() {
         return System.currentTimeMillis() - lastFrameTime < 2000;
     }

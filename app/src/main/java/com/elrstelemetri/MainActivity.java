@@ -79,6 +79,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     private VideoPanel videoPanel;
     private RtmpServer rtmp;
     private String rtmpError = "";
+    private boolean videoActiveShown;
 
     // Derived values (UI thread)
     private double curRelAlt = Double.NaN, curHeading, curDist = Double.NaN, curCell = Double.NaN;
@@ -303,8 +304,12 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         FrameLayout.LayoutParams lp;
         if (settings.videoMode == Settings.VIDEO_FULL) {
             lp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
-        } else {
+        } else if (videoActiveShown) {
             lp = new FrameLayout.LayoutParams(dp(320), dp(180), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            lp.setMargins(0, 0, 0, dp(58));
+        } else {
+            // no stream yet: a compact strip with the URL instead of a big empty box over the map
+            lp = new FrameLayout.LayoutParams(dp(300), dp(62), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
             lp.setMargins(0, 0, 0, dp(58));
         }
         videoPanel.setLayoutParams(lp);
@@ -495,9 +500,14 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         }
 
         videoPanel.setIdleText(rtmpError.isEmpty()
-                ? "Video: waiting for DJI Fly stream\n" + primaryStreamUrl() + "\n(⚙ Settings › Video stream for all URLs)"
+                ? "Video: waiting for DJI Fly stream\n" + primaryStreamUrl()
                 : rtmpError);
         videoPanel.refresh(now);
+        boolean active = videoPanel.isLive() || videoPanel.isConnected();
+        if (active != videoActiveShown) {
+            videoActiveShown = active;
+            applyVideoMode();
+        }
         if (!rtmpError.isEmpty()) notices.add(rtmpError);
 
         // Logging on/off
