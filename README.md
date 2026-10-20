@@ -49,7 +49,10 @@ radio's telemetry **on a map**. No MAVLink needed: it reads the CRSF telemetry t
    The backpack restarts; wait a few seconds.
 5. Connect the phone/tablet to the WiFi network **`ExpressLRS TX Backpack XXXXXX`**, password **`expresslrs`**.
    When Android warns that the network has no internet, choose to **stay connected**.
-6. Open the app. Telemetry appears within a few seconds.
+6. Open the app. Until telemetry arrives, the app shows only a **Waiting for connection** screen with
+   the WiFi to join, a button to open Android's WiFi settings, and ⚙ Settings. As soon as telemetry
+   arrives the full ground station appears. If the link is lost later, the ground station stays visible
+   with the *Telemetry lost* alarm and the last known position.
 
 ## Offline maps
 

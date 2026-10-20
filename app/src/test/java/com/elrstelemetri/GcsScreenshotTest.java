@@ -82,6 +82,12 @@ public class GcsScreenshotTest {
         ActivityController<MainActivity> ctl = Robolectric.buildActivity(MainActivity.class).setup();
         MainActivity a = ctl.get();
 
+        // Before any telemetry: only the waiting screen is shown
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(400));
+        View decor = a.getWindow().getDecorView();
+        render(decor, decor.getWidth() > 0 ? decor.getWidth() : 1640, decor.getHeight() > 0 ? decor.getHeight() : 780,
+                "waiting.png");
+
         DatagramSocket tx = new DatagramSocket();
         InetAddress lo = InetAddress.getLoopbackAddress();
         double homeLat = 37.0742, homeLon = 36.2464;

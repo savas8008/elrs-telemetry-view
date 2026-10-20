@@ -98,6 +98,11 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
 
     // Views
     private LinearLayout leftPanel, rightPanel;
+    // Shown until the first telemetry arrives: everything else is hidden
+    private View topBar, buttonBar, dimView;
+    private LinearLayout waitCard;
+    private TextView waitDetail;
+    private boolean waitingShown;
     private TextView tMode, tArm, tTimer, tLq, tRssi, tSats, tRec, tLink, tWarn, tInfo;
     private TextView vAlt, vVario, vSpeed, vDist, vHomeDir, vGpsAlt;
     private TextView vCell, vCurr, vMah, vPower, vSnr, vTxPow, vDown, vRf;
@@ -386,7 +391,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     }
 
     private void applyVideoMode() {
-        boolean show = settings.videoMode != Settings.VIDEO_OFF;
+        boolean show = settings.videoMode != Settings.VIDEO_OFF && !waitingShown;
         boolean replace = show && settings.videoMode == Settings.VIDEO_REPLACE_MAP;
         videoWindow.setVisibility(show ? View.VISIBLE : View.GONE);
         map.view.setVisibility(replace ? View.INVISIBLE : View.VISIBLE);
@@ -590,9 +595,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             tInfo.setText(info);
 
             // ---- Notices (not alarms)
-            if (s.lastDatagramTime == 0) {
-                notices.add("Waiting for telemetry — is this device on the backpack WiFi? Radio: Backpack › Telemetry = WiFi");
-            } else if (s.mavlinkSuspect) {
+            if (s.mavlinkSuspect) {
                 notices.add("Receiving MAVLink — set Link Mode = Normal on the radio");
             } else if (s.datagramCount > 20 && s.frameCount == 0) {
                 notices.add("Packets arrive but contain no CRSF frames — Settings › Show raw UDP data");
@@ -621,6 +624,22 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             lines.add("(tap to mute for 2 min)");
         }
         lines.addAll(notices);
+
+        // ---- Waiting screen: until the first telemetry of this session arrives. Once data has been
+        // received the GCS stays visible even if the link is lost (alarm + last known position).
+        boolean waiting = !hadData;
+        if (waiting) {
+            String detail;
+            synchronized (state) {
+                if (state.lastDatagramTime == 0) detail = "No data received yet (UDP port " + settings.port + ")";
+                else if (state.mavlinkSuspect) detail = "Receiving MAVLink — set Link Mode = Normal on the radio";
+                else detail = "Packets arrive but contain no CRSF telemetry — check Link Mode = Normal";
+            }
+            waitDetail.setText(detail);
+        }
+        setWaiting(waiting);
+        if (waiting) return;
+
         if (lines.isEmpty()) {
             tWarn.setVisibility(View.GONE);
         } else {
@@ -918,6 +937,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         FrameLayout.LayoutParams tlp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(44), Gravity.TOP);
         tlp.setMargins(dp(8), dp(6), dp(8), 0);
         root.addView(top, tlp);
+        topBar = top;
 
         // ---- Left panel: flight
         leftPanel = panel();
@@ -1036,6 +1056,55 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
                 FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         bl.setMargins(0, 0, 0, dp(8));
         root.addView(buttons, bl);
+        buttonBar = buttons;
+
+        // ---- Waiting screen (no telemetry yet)
+        dimView = new View(this);
+        dimView.setBackgroundColor(Color.argb(150, 0, 0, 0));
+        dimView.setClickable(true);  // the map is not usable while waiting
+        root.addView(dimView, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        waitCard = panel();
+        waitCard.setGravity(Gravity.CENTER_HORIZONTAL);
+        waitCard.setPadding(dp(24), dp(18), dp(24), dp(18));
+        TextView wIcon = new TextView(this);
+        wIcon.setText("📡");
+        wIcon.setTextSize(34);
+        wIcon.setGravity(Gravity.CENTER);
+        waitCard.addView(wIcon);
+        TextView wTitle = new TextView(this);
+        wTitle.setText("Waiting for connection");
+        wTitle.setTextSize(20);
+        wTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        wTitle.setTextColor(C_TEXT);
+        wTitle.setGravity(Gravity.CENTER);
+        waitCard.addView(wTitle);
+        TextView wBody = new TextView(this);
+        wBody.setText("Connect this device to the radio's WiFi:\n"
+                + "ExpressLRS TX Backpack XXXXXX   (password: expresslrs)\n\n"
+                + "On the radio: ELRS Lua › Backpack › Telemetry = WiFi");
+        wBody.setTextSize(14);
+        wBody.setTextColor(C_TEXT);
+        wBody.setGravity(Gravity.CENTER);
+        wBody.setPadding(0, dp(8), 0, dp(8));
+        waitCard.addView(wBody);
+        waitDetail = new TextView(this);
+        waitDetail.setTextSize(12);
+        waitDetail.setTextColor(C_LABEL);
+        waitDetail.setGravity(Gravity.CENTER);
+        waitDetail.setPadding(0, 0, 0, dp(12));
+        waitCard.addView(waitDetail);
+        LinearLayout wButtons = new LinearLayout(this);
+        wButtons.setOrientation(LinearLayout.HORIZONTAL);
+        wButtons.setGravity(Gravity.CENTER);
+        wButtons.addView(cardButton("Open WiFi settings", true, v -> openWifiSettings()));
+        wButtons.addView(cardButton("⚙ Settings", false, v -> showSettings()));
+        waitCard.addView(wButtons);
+        FrameLayout.LayoutParams wl = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
+        wl.setMargins(dp(16), dp(16), dp(16), dp(16));
+        root.addView(waitCard, wl);
+        setWaiting(true);
 
         updateFollowButton();
         applyPanelVisibility();
@@ -1043,8 +1112,47 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         return root;
     }
 
+    /** Switches between the waiting screen (no telemetry yet) and the full GCS. */
+    private void setWaiting(boolean waiting) {
+        if (waiting == waitingShown && waitCard.getVisibility() == (waiting ? View.VISIBLE : View.GONE)) return;
+        waitingShown = waiting;
+        int gcs = waiting ? View.GONE : View.VISIBLE;
+        topBar.setVisibility(gcs);
+        buttonBar.setVisibility(gcs);
+        if (waiting) tWarn.setVisibility(View.GONE);
+        dimView.setVisibility(waiting ? View.VISIBLE : View.GONE);
+        waitCard.setVisibility(waiting ? View.VISIBLE : View.GONE);
+        applyPanelVisibility();
+        applyVideoMode();
+    }
+
+    private TextView cardButton(String text, boolean primary, View.OnClickListener l) {
+        TextView b = new TextView(this);
+        b.setText(text);
+        b.setTextSize(15);
+        b.setTypeface(Typeface.DEFAULT_BOLD);
+        b.setTextColor(Color.WHITE);
+        b.setGravity(Gravity.CENTER);
+        b.setPadding(dp(18), dp(10), dp(18), dp(10));
+        b.setBackground(roundBg(primary ? Color.rgb(0, 130, 190) : Color.rgb(55, 60, 72), 10));
+        b.setOnClickListener(l);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(dp(6), 0, dp(6), 0);
+        b.setLayoutParams(lp);
+        return b;
+    }
+
+    private void openWifiSettings() {
+        try {
+            startActivity(new Intent(android.provider.Settings.Panel.ACTION_WIFI));
+        } catch (Exception e) {
+            startActivity(new Intent(android.provider.Settings.ACTION_WIFI_SETTINGS));
+        }
+    }
+
     private void applyPanelVisibility() {
-        int v = settings.showPanels ? View.VISIBLE : View.GONE;
+        int v = settings.showPanels && !waitingShown ? View.VISIBLE : View.GONE;
         leftPanel.setVisibility(v);
         rightPanel.setVisibility(v);
     }
