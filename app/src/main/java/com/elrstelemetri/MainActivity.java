@@ -86,7 +86,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     private N3UsbLink n3;
     private Intent launchIntent;
     private byte[] n3Sps, n3Pps;   // read thread only
-    private TextView bVideo;
+    private View bVideo;
     private VideoPanel videoPanel;
     private VideoWindow videoWindow;
     private FrameLayout gcsRoot;
@@ -106,7 +106,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     private TextView tMode, tArm, tTimer, tLq, tRssi, tSats, tRec, tLink, tWarn, tInfo;
     private TextView vAlt, vVario, vSpeed, vDist, vHomeDir, vGpsAlt;
     private TextView vCell, vCurr, vMah, vPower, vSnr, vTxPow, vDown, vRf;
-    private TextView bFollow;
+    private View bFollow;
     private HorizonView horizon;
     private BatteryView battery;
     private SparklineView sparkAlt, sparkVolt;
@@ -143,7 +143,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             public void onStreamStarted() {
                 videoPanel.onConnected();
                 Toast.makeText(MainActivity.this, settings.videoMode == Settings.VIDEO_OFF
-                        ? "Goggles video connected — tap 🥽 to show it" : "Goggles video connected",
+                        ? "Goggles video connected — tap the goggles button to show it" : "Goggles video connected",
                         Toast.LENGTH_SHORT).show();
             }
 
@@ -533,12 +533,12 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             setText(tMode, mode.isEmpty() ? "MODE —" : mode.replace("*", ""), C_TEXT, !fresh(s.modeTime, now));
             if (!curArmedKnown) styleChip(tArm, "ARM ?", C_STALE);
             else styleChip(tArm, curArmed ? "ARMED" : "DISARMED", curArmed ? C_BAD : C_OK);
-            tTimer.setText("⏱ " + FlightStats.formatDuration(stats.flightMs));
+            tTimer.setText(FlightStats.formatDuration(stats.flightMs));
 
             boolean lqAlarm = al.isActive(AlarmSet.LOW_LQ);
             setText(tLq, "LQ " + s.lq + "%", lqAlarm ? C_BAD : s.lq < 80 ? C_WARN : C_OK, ls);
             setText(tRssi, s.rssi1 + "/" + s.rssi2 + " dBm", al.isActive(AlarmSet.LOW_RSSI) ? C_BAD : C_TEXT, ls);
-            setText(tSats, "🛰 " + s.sats, al.isActive(AlarmSet.LOW_SATS) ? C_BAD : C_OK, !gpsFresh);
+            setText(tSats, String.valueOf(s.sats), al.isActive(AlarmSet.LOW_SATS) ? C_BAD : C_OK, !gpsFresh);
             if (logger.isOpen()) {
                 styleChip(tRec, "● REC " + FlightStats.formatDuration(now - logger.startTime), C_BAD);
             } else {
@@ -619,7 +619,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         // ---- Banner
         List<String> lines = new ArrayList<>(alarmLines);
         if (!alarmLines.isEmpty() && alerts.isMuted()) {
-            lines.add("🔇 muted " + FlightStats.formatDuration(alerts.mutedRemainingMs()) + " · tap to unmute");
+            lines.add("MUTED " + FlightStats.formatDuration(alerts.mutedRemainingMs()) + " · tap to unmute");
         } else if (!alarmLines.isEmpty()) {
             lines.add("(tap to mute for 2 min)");
         }
@@ -877,18 +877,25 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         return p;
     }
 
-    private TextView mapButton(LinearLayout parent, String icon, View.OnClickListener l) {
-        TextView t = new TextView(this);
-        t.setText(icon);
-        t.setTextSize(18);
-        t.setTextColor(Color.WHITE);
-        t.setGravity(Gravity.CENTER);
+    private android.widget.ImageView mapButton(LinearLayout parent, int icon, View.OnClickListener l) {
+        android.widget.ImageView t = new android.widget.ImageView(this);
+        t.setImageResource(icon);
+        t.setPadding(dp(9), dp(9), dp(9), dp(9));
         t.setBackground(roundBg(C_PANEL, 22));
         t.setOnClickListener(l);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(40), dp(40));
-        lp.setMargins(dp(3), 0, dp(3), 0);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(42), dp(42));
+        lp.setMargins(dp(4), 0, dp(4), 0);
         parent.addView(t, lp);
         return t;
+    }
+
+    /** Puts a small line icon in front of a text view. */
+    private void leadingIcon(TextView t, int icon, int sizeDp) {
+        android.graphics.drawable.Drawable d = getDrawable(icon);
+        if (d == null) return;
+        d.setBounds(0, 0, dp(sizeDp), dp(sizeDp));
+        t.setCompoundDrawablesRelative(d, null, null, null);
+        t.setCompoundDrawablePadding(dp(5));
     }
 
     private View buildUi() {
@@ -914,11 +921,13 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         cl.setMargins(dp(10), 0, dp(6), 0);
         top.addView(tArm, cl);
         tTimer = text(14, C_TEXT, true);
+        leadingIcon(tTimer, R.drawable.ic_timer, 16);
         top.addView(tTimer);
         top.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
         tLq = text(14, C_STALE, true);
         tRssi = text(12, C_STALE, true);
         tSats = text(14, C_STALE, true);
+        leadingIcon(tSats, R.drawable.ic_satellite, 18);
         for (TextView t : new TextView[]{tLq, tRssi, tSats}) {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -1018,27 +1027,27 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
 
         LinearLayout buttons = new LinearLayout(this);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
-        bFollow = mapButton(buttons, "⌖", v -> {
+        bFollow = mapButton(buttons, R.drawable.ic_follow, v -> {
             map.setFollow(!map.isFollowing());
             centerOnPlane();
         });
-        mapButton(buttons, "🗺", v -> {
+        mapButton(buttons, R.drawable.ic_layers, v -> {
             settings.mapType = (settings.mapType + 1) % Settings.MAP_NAMES.length;
             map.setMapType(settings.mapType);
             Toast.makeText(this, "Map: " + Settings.MAP_NAMES[settings.mapType], Toast.LENGTH_SHORT).show();
         });
-        mapButton(buttons, "⌂", v -> {
+        mapButton(buttons, R.drawable.ic_home, v -> {
             synchronized (state) {
                 state.resetHome();
             }
             Toast.makeText(this, "Home will be reset at the next GPS fix", Toast.LENGTH_SHORT).show();
         });
-        mapButton(buttons, "⌫", v -> {
+        mapButton(buttons, R.drawable.ic_clear_track, v -> {
             map.clearTrack();
             Toast.makeText(this, "Track cleared", Toast.LENGTH_SHORT).show();
         });
-        // 🥽 = goggles video panel on/off (FULL/PIP and ✕ are on the video itself)
-        bVideo = mapButton(buttons, "🥽", v -> {
+        // goggles = video panel on/off (fullscreen/PiP and close are on the video itself)
+        bVideo = mapButton(buttons, R.drawable.ic_goggles, v -> {
             boolean on = settings.videoMode == Settings.VIDEO_OFF;
             int shown = settings.videoShownMode == Settings.VIDEO_OFF ? Settings.VIDEO_PANEL : settings.videoShownMode;
             setVideoMode(on ? shown : Settings.VIDEO_OFF);
@@ -1046,12 +1055,12 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
                 Toast.makeText(this, "Connect the goggles with a USB-C cable", Toast.LENGTH_SHORT).show();
             }
         });
-        mapButton(buttons, "▣", v -> {
+        mapButton(buttons, R.drawable.ic_panels, v -> {
             settings.showPanels = !settings.showPanels;
             applyPanelVisibility();
         });
-        mapButton(buttons, "📊", v -> showSummary());
-        mapButton(buttons, "⚙", v -> showSettings());
+        mapButton(buttons, R.drawable.ic_summary, v -> showSummary());
+        mapButton(buttons, R.drawable.ic_settings, v -> showSettings());
         FrameLayout.LayoutParams bl = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         bl.setMargins(0, 0, 0, dp(8));
@@ -1067,11 +1076,21 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         waitCard = panel();
         waitCard.setGravity(Gravity.CENTER_HORIZONTAL);
         waitCard.setPadding(dp(24), dp(18), dp(24), dp(18));
-        TextView wIcon = new TextView(this);
-        wIcon.setText("📡");
-        wIcon.setTextSize(34);
-        wIcon.setGravity(Gravity.CENTER);
-        waitCard.addView(wIcon);
+        FrameLayout radio = new FrameLayout(this);
+        android.widget.ImageView radioBody = new android.widget.ImageView(this);
+        radioBody.setImageResource(R.drawable.ic_radio);
+        radio.addView(radioBody, new FrameLayout.LayoutParams(dp(96), dp(96)));
+        android.widget.ImageView radioWaves = new android.widget.ImageView(this);
+        radioWaves.setImageResource(R.drawable.ic_radio_waves);
+        radio.addView(radioWaves, new FrameLayout.LayoutParams(dp(96), dp(96)));
+        android.animation.ObjectAnimator pulse = android.animation.ObjectAnimator.ofFloat(radioWaves, "alpha", 1f, 0.15f);
+        pulse.setDuration(900);
+        pulse.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+        pulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        pulse.start();
+        LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(dp(96), dp(96));
+        rl.gravity = Gravity.CENTER_HORIZONTAL;
+        waitCard.addView(radio, rl);
         TextView wTitle = new TextView(this);
         wTitle.setText("Waiting for connection");
         wTitle.setTextSize(20);
@@ -1098,7 +1117,9 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         wButtons.setOrientation(LinearLayout.HORIZONTAL);
         wButtons.setGravity(Gravity.CENTER);
         wButtons.addView(cardButton("Open WiFi settings", true, v -> openWifiSettings()));
-        wButtons.addView(cardButton("⚙ Settings", false, v -> showSettings()));
+        TextView wSettings = cardButton("Settings", false, v -> showSettings());
+        leadingIcon(wSettings, R.drawable.ic_settings, 18);
+        wButtons.addView(wSettings);
         waitCard.addView(wButtons);
         FrameLayout.LayoutParams wl = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER);

@@ -77,7 +77,7 @@ Notes:
 The app shows the live video directly from **DJI Goggles N3** over a USB-C cable — no DJI Fly, no
 network streaming.
 
-1. Tap **🥽** in the bottom bar. The video panel opens.
+1. Tap the **goggles** button in the bottom bar. The video panel opens.
 2. If the goggles are not connected yet, the panel says so and offers **Connect**:
    - Turn on the goggles and link them to the aircraft (live view on the goggles).
    - Connect the goggles to this phone/tablet with a **USB-C data cable** (not charge-only).
@@ -91,9 +91,9 @@ network streaming.
    - **Replace the map**: the video fills the screen and the telemetry panels are overlaid on it.
 
 Controls:
-- **🥽** in the bottom bar opens/closes the video panel (blue = open).
-- On the floating panel (top-right): **FULL** = replace the map, **✕** = close; **◢** = resize, drag anywhere else to move.
-- While the video replaces the map (bottom-left): **PIP** = back to the floating panel, **✕** = close.
+- The **goggles** button in the bottom bar opens/closes the video panel (blue = open).
+- On the floating panel (top-right): **fullscreen** = replace the map, **✕** = close; **◢** = resize, drag anywhere else to move.
+- While the video replaces the map (bottom-left): **picture-in-picture** = back to the floating panel, **✕** = close.
 
 Telemetry still comes from the backpack WiFi, so one device does everything: WiFi for telemetry,
 USB for video.
@@ -124,8 +124,8 @@ USB for video.
 | Top centre | Alarms (red) and notices — **tap to mute alarms for 2 minutes** |
 | Bottom | Buttons |
 
-Buttons: **⌖** follow · **🗺** map layer · **⌂** reset home · **⌫** clear track ·
-**🥽** goggles video panel · **▣** show/hide panels · **📊** flight summary · **⚙** settings
+Buttons (left to right): follow · map layer · reset home · clear track ·
+goggles video panel · show/hide panels · flight summary · settings
 
 - **Altitude**: barometric altitude if the FC sends it (zeroed at arming), otherwise GPS altitude minus home altitude.
 - **Home**: taken automatically at the first GPS fix with 6 or more satellites.
@@ -236,6 +236,7 @@ permission needed). Open them with a file manager or import them into a spreadsh
 | `TelemetryService.java` | Foreground service that keeps the app running while another app is in front |
 | `SettingsDialog.java` | Settings screen |
 | `MainActivity.java` | UDP receiver and GCS screen |
+| `tools/icons.py` | Generates the app's line-icon set and launcher icon (`res/drawable/ic_*.xml`); edit the generator, not the XML |
 
 ## Third-party code and licences
 

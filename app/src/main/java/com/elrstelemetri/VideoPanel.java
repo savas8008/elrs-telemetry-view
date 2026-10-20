@@ -71,11 +71,12 @@ public final class VideoPanel extends FrameLayout implements TextureView.Surface
         overlay.setGravity(Gravity.CENTER);
         overlay.setBackgroundColor(Color.BLACK);  // opaque: never leave a frozen last frame visible
         overlay.setPadding(dp(12), dp(8), dp(12), dp(8));
-        TextView icon = new TextView(c);
-        icon.setText("🥽");
-        icon.setTextSize(26);
-        icon.setGravity(Gravity.CENTER);
-        overlay.addView(icon);
+        android.widget.ImageView icon = new android.widget.ImageView(c);
+        icon.setImageResource(R.drawable.ic_goggles);
+        icon.setAlpha(0.75f);
+        LinearLayout.LayoutParams il = new LinearLayout.LayoutParams(dp(44), dp(44));
+        il.setMargins(0, 0, 0, dp(4));
+        overlay.addView(icon, il);
         message = new TextView(c);
         message.setTextColor(Color.rgb(225, 230, 238));
         message.setTextSize(13);

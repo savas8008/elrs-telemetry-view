@@ -14,13 +14,13 @@ import android.widget.TextView;
 
 /**
  * Floating container for the video: drag the window to move it, drag the ◢ corner to resize it.
- * Buttons on the window: FULL/PIP switches between the panel and "replace the map", ✕ hides the video.
+ * Buttons on the window: fullscreen/picture-in-picture switches between the panel and "replace the map", ✕ hides the video.
  * Stays inside its parent.
  */
 public final class VideoWindow extends FrameLayout {
 
     public interface Listener {
-        /** FULL/PIP pressed: switch between the floating panel and replacing the map. */
+        /** Fullscreen / picture-in-picture pressed: switch between the floating panel and replacing the map. */
         void onToggleFull();
 
         /** ✕ pressed: hide the video. */
@@ -31,9 +31,9 @@ public final class VideoWindow extends FrameLayout {
     }
 
     public final VideoPanel video;
-    private final TextView handle;
+    private final android.widget.ImageView handle;
     private final android.widget.LinearLayout controls;
-    private final TextView fullButton;
+    private final android.widget.ImageView fullButton;
     private final int slop;
     private final int minW, minH;
     private Listener listener;
@@ -52,11 +52,9 @@ public final class VideoWindow extends FrameLayout {
         minH = dp(90);
         addView(video, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 
-        handle = new TextView(c);
-        handle.setText("◢");
-        handle.setTextSize(20);
-        handle.setTextColor(Color.WHITE);
-        handle.setGravity(Gravity.CENTER);
+        handle = new android.widget.ImageView(c);
+        handle.setImageResource(R.drawable.ic_resize);
+        handle.setPadding(dp(5), dp(5), dp(5), dp(5));
         GradientDrawable hb = new GradientDrawable();
         hb.setColor(Color.argb(150, 0, 0, 0));
         hb.setCornerRadius(dp(6));
@@ -67,32 +65,26 @@ public final class VideoWindow extends FrameLayout {
 
         controls = new android.widget.LinearLayout(c);
         controls.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-        fullButton = controlButton(c, "FULL", () -> {
+        fullButton = controlButton(c, R.drawable.ic_fullscreen, () -> {
             if (listener != null) listener.onToggleFull();
         });
         controls.addView(fullButton);
-        controls.addView(controlButton(c, "✕", () -> {
+        controls.addView(controlButton(c, R.drawable.ic_close, () -> {
             if (listener != null) listener.onClose();
         }));
         addView(controls, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END));
     }
 
-    private TextView controlButton(Context c, String text, Runnable action) {
-        TextView b = new TextView(c);
-        b.setText(text);
-        b.setTextSize(text.length() > 1 ? 11 : 17);
-        b.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        b.setPadding(dp(6), 0, dp(6), 0);
-        b.setTextColor(Color.WHITE);
-        b.setGravity(Gravity.CENTER);
+    private android.widget.ImageView controlButton(Context c, int icon, Runnable action) {
+        android.widget.ImageView b = new android.widget.ImageView(c);
+        b.setImageResource(icon);
+        b.setPadding(dp(6), dp(6), dp(6), dp(6));
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(Color.argb(160, 0, 0, 0));
         bg.setCornerRadius(dp(6));
         b.setBackground(bg);
         b.setOnClickListener(v -> action.run());
-        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
-                text.length() > 1 ? android.widget.LinearLayout.LayoutParams.WRAP_CONTENT : dp(34), dp(34));
-        b.setMinWidth(dp(34));
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(dp(34), dp(34));
         lp.setMargins(dp(3), dp(3), dp(3), 0);
         b.setLayoutParams(lp);
         return b;
@@ -112,7 +104,7 @@ public final class VideoWindow extends FrameLayout {
         handle.setVisibility(f ? View.VISIBLE : View.GONE);
         // Panel: buttons top-right. Replacing the map: bottom-left (free while the map is hidden),
         // because the top and sides are covered by the telemetry panels.
-        fullButton.setText(f ? "FULL" : "PIP");
+        fullButton.setImageResource(f ? R.drawable.ic_fullscreen : R.drawable.ic_pip);
         LayoutParams lp = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT,
                 f ? Gravity.TOP | Gravity.END : Gravity.BOTTOM | Gravity.START);
         if (!f) lp.setMargins(dp(8), 0, 0, dp(10));
