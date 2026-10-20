@@ -1,0 +1,26 @@
+ELRS Telemetry View
+
+This product includes software adapted from DJI Unchained VOC
+(https://github.com/jtm2kfpv-git/DJI-Unchained-VOC), licensed under the
+Apache License, Version 2.0 (see LICENSE-APACHE-2.0.txt). Its NOTICE reads:
+
+    DJI Unchained VOC
+    Copyright 2026 JTM2k FPV
+
+    This product is unofficial and is not affiliated with, endorsed by or
+    supported by DJI. DJI product names and logos are trademarks of their
+    respective owners.
+
+    Branded raster artwork is not licensed under the Apache License 2.0.
+    See ASSET-LICENSE.md for the applicable boundaries.
+
+Adapted files (app/src/main/java/com/elrstelemetri/n3/): LogicLinkDecoder,
+H264AnnexBAssembler, N3ControlPackets, N3Session and N3UsbLink. Each file states
+the changes made. No branded artwork from that project is included.
+
+The N3 control packets originate from samuelsadok/dji_protocol
+(https://github.com/samuelsadok/dji_protocol, commit
+50c71b65fdb6825783f724e5cd3c1f09c2aa88ce).
+
+This app is unofficial and is not affiliated with, endorsed by or supported by
+DJI. DJI product names are trademarks of their respective owners.

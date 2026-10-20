@@ -30,6 +30,7 @@ public class Settings {
     public int videoMode = VIDEO_PANEL;
     public int videoShownMode = VIDEO_PANEL;  // mode restored when the video is switched back on
     public boolean keepRunning = true;        // foreground service: keep working while another app is open
+    public boolean usbGoggles = true;         // video straight from Goggles N3 over USB (no DJI Fly)
     /** Floating panel geometry as fractions of the screen; negative = default. */
     public float videoX = -1, videoY = -1, videoW = -1, videoH = -1;
 
@@ -58,6 +59,7 @@ public class Settings {
         videoMode = p.getInt("videoMode", videoMode);
         videoShownMode = p.getInt("videoShownMode", videoShownMode);
         keepRunning = p.getBoolean("keepRunning", keepRunning);
+        usbGoggles = p.getBoolean("usbGoggles", usbGoggles);
         videoX = p.getFloat("videoX", -1);
         videoY = p.getFloat("videoY", -1);
         videoW = p.getFloat("videoW", -1);
@@ -88,6 +90,7 @@ public class Settings {
                 .putInt("videoMode", videoMode)
                 .putInt("videoShownMode", videoShownMode)
                 .putBoolean("keepRunning", keepRunning)
+                .putBoolean("usbGoggles", usbGoggles)
                 .putFloat("videoX", videoX)
                 .putFloat("videoY", videoY)
                 .putFloat("videoW", videoW)

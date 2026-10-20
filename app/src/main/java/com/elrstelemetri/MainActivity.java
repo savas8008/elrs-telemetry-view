@@ -26,6 +26,9 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.elrstelemetri.n3.H264AnnexBAssembler;
+import com.elrstelemetri.n3.N3UsbLink;
+
 import org.osmdroid.tileprovider.cachemanager.CacheManager;
 
 import java.net.DatagramPacket;
@@ -82,6 +85,9 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     private String downloadStatus = "";
     private boolean downloading;
     private boolean started;
+    private N3UsbLink n3;
+    private Intent launchIntent;
+    private byte[] n3Sps, n3Pps;   // read thread only
     private TextView bVideo, bExpand;
     private VideoPanel videoPanel;
     private VideoWindow videoWindow;
@@ -142,6 +148,32 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
                 Toast.makeText(MainActivity.this, "Video stream ended", Toast.LENGTH_SHORT).show();
             }
         });
+        // Video straight from Goggles N3 over USB, decoded by the same video panel as RTMP
+        n3 = new N3UsbLink(this, new N3UsbLink.Listener() {
+            @Override
+            public void onStreamStarted() {
+                videoPanel.onPublish("usb", "n3", "Goggles N3 (USB)");
+            }
+
+            @Override
+            public void onAccessUnit(H264AnnexBAssembler.AccessUnit au) {
+                if (au.sps != null && au.pps != null
+                        && (!java.util.Arrays.equals(au.sps, n3Sps) || !java.util.Arrays.equals(au.pps, n3Pps))) {
+                    n3Sps = au.sps;
+                    n3Pps = au.pps;
+                    videoPanel.onVideoConfig(RtmpServer.MIME_AVC, au.sps, au.pps);
+                }
+                if (n3Sps != null) videoPanel.onVideoFrame(au.data, android.os.SystemClock.elapsedRealtime(), au.keyFrame);
+            }
+
+            @Override
+            public void onStreamStopped(String reason) {
+                n3Sps = null;
+                n3Pps = null;
+                videoPanel.onDisconnect("Goggles N3: " + reason);
+            }
+        });
+        launchIntent = getIntent();
         videoWindow = new VideoWindow(this, videoPanel);
         videoWindow.setListener(new VideoWindow.Listener() {
             @Override
@@ -178,6 +210,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         handleExit(intent);
+        if (settings.usbGoggles) n3.handleIntent(intent);  // goggles plugged in while the app runs
     }
 
     /** "Exit" from the notification: stop everything and close. */
@@ -250,6 +283,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         router.start();
         startReceiver();
         if (rtmp == null) startVideo();
+        if (settings.usbGoggles) n3.start(launchIntent);
         ui.post(tick);
         ui.post(logTick);
     }
@@ -261,6 +295,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         ui.removeCallbacks(logTick);
         stopReceiver();
         stopVideo();
+        n3.stop();
         router.stop();
         logger.close();
         if (mcLock != null && mcLock.isHeld()) mcLock.release();
@@ -639,12 +674,13 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             }
         }
 
-        videoPanel.setIdleText(rtmpError.isEmpty()
-                ? "Video: waiting for DJI Fly stream\n" + primaryStreamUrl()
-                : rtmpError);
+        String idle = settings.usbGoggles ? "Goggles N3 (USB): " + n3.status() + "\n" : "";
+        idle += rtmpError.isEmpty() ? "DJI Fly RTMP: " + primaryStreamUrl() : rtmpError;
+        videoPanel.setIdleText(idle);
         videoPanel.refresh(now);
         if (settings.videoEnabled && videoPanel.isStalled()) {
-            notices.add("DJI Fly stopped sending video — keep DJI Fly visible (split screen) or use a second phone");
+            notices.add(videoPanel.isUsbSource() ? "No video from the goggles — check the goggles' link to the aircraft"
+                    : "DJI Fly stopped sending video — keep DJI Fly visible (split screen) or use a second phone");
         }
         if (!rtmpError.isEmpty()) notices.add(rtmpError);
 
@@ -751,7 +787,19 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             startReceiver();
         }
         if (settings.videoEnabled != oldVideoEnabled || settings.videoPort != oldVideoPort) startVideo();
+        if (settings.usbGoggles) n3.start(null);
+        else n3.stop();
         applyVideoMode();
+    }
+
+    @Override
+    public String usbStatus() {
+        return settings.usbGoggles ? n3.status() + (n3.identity().isEmpty() ? "" : "\n" + n3.identity()) : "off";
+    }
+
+    @Override
+    public void usbReconnect() {
+        if (settings.usbGoggles) n3.reconnect();
     }
 
     @Override

@@ -96,7 +96,10 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
             return;
         }
         String t;
-        if (connected && hadVideo) {
+        if (connected && hadVideo && isUsbSource()) {
+            t = "No video from the goggles for " + ((now - lastDataTime) / 1000) + " s\n"
+                    + "check the goggles' link to the aircraft — recovering automatically";
+        } else if (connected && hadVideo) {
             // DJI Fly keeps the connection open but stopped sending (e.g. it went to the background)
             t = "No video for " + ((now - lastDataTime) / 1000) + " s — DJI Fly stopped sending.\n"
                     + "DJI Fly pauses live streaming while it is not visible:\n"
@@ -110,6 +113,11 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
         status.setText(t);
         // Opaque: never leave the last decoded frame visible, it would look like live video
         status.setBackgroundColor(Color.BLACK);
+    }
+
+    /** True when the current stream comes from the goggles over USB (not RTMP). */
+    public boolean isUsbSource() {
+        return remote.startsWith("Goggles");
     }
 
     /** True while connected but the publisher has stopped sending video. */

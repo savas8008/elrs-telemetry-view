@@ -33,6 +33,7 @@ radio's telemetry **on a map**. No MAVLink needed: it reads the CRSF telemetry t
   RF mode, satellites, flight mode, arm state
 - **Altitude and voltage charts** (last 5 minutes)
 - **Configurable alarms** with on-screen banner, voice and vibration (see [Alarms](#alarms))
+- **Live video straight from DJI Goggles N3 over USB** — no DJI Fly needed (see [Goggles N3 over USB](#video-from-dji-goggles-n3-over-usb-no-dji-fly))
 - **Live video from DJI Fly** (RTMP): in a floating panel you can drag and resize, or replacing the map
   with telemetry overlaid; a **DJI Fly** button copies the stream URL and opens DJI Fly
   (see [Video stream](#video-stream-dji-fly))
@@ -69,6 +70,33 @@ Notes:
   **online only** because the OpenStreetMap tile policy forbids bulk downloads.
 - If mobile data happens to be available while on the backpack WiFi, the app uses it for map tiles
   automatically. The top bar shows the source: `map: mobile data`, `map: offline cache` or `map: WiFi internet`.
+
+## Video from DJI Goggles N3 over USB (no DJI Fly)
+
+The app can take the live video directly from **DJI Goggles N3** over a USB-C cable, without DJI Fly.
+This avoids DJI Fly's limitation of stopping the stream when it is not on screen.
+
+1. Link the goggles to the aircraft (live view on the goggles).
+2. Connect the goggles to the phone/tablet running this app with a **USB-C data cable**.
+3. When Android asks which app to open for the DJI accessory, choose **ELRS Telemetry**
+   (tick "always" to skip the question next time). If the app is already open it connects automatically.
+4. The video appears in the video panel (📹, FULL/PIP and the panel controls work as for RTMP).
+
+Telemetry still comes from the backpack WiFi, so one device does everything: WiFi for telemetry,
+USB for video.
+
+- Status and a **Reconnect USB** button: ⚙ Settings → Goggles N3 over USB. The panel also shows the
+  USB status while no video arrives.
+- If the video stops, the app resends the subscription after 3 s and reopens the USB connection after 8 s.
+- While this app uses the goggles' USB connection, DJI Fly cannot use it at the same time.
+
+> [!WARNING]
+> **Unofficial and experimental.** This uses the reverse-engineered N3 mobile USB protocol from the
+> open-source project [DJI Unchained VOC](https://github.com/jtm2kfpv-git/DJI-Unchained-VOC)
+> (Apache-2.0, based on [samuelsadok/dji_protocol](https://github.com/samuelsadok/dji_protocol)).
+> That project was tested with N3 + O4 Air Unit Pro / Avata 2; other air units (e.g. O4 Air Unit Lite)
+> are expected to work because the video comes from the goggles, but this is not verified. A DJI
+> firmware update may change the protocol. Never rely on it for flight safety. Not affiliated with DJI.
 
 ## Video stream (DJI Fly)
 
@@ -206,6 +234,7 @@ permission needed). Open them with a file manager or import them into a spreadsh
 | No position | Is GPS enabled on the aircraft with GPS telemetry, with enough satellites? |
 | No voice | Install/enable an English voice in Android's text-to-speech settings. |
 | Video stops when switching from DJI Fly to this app | DJI Fly pauses live streaming when it is not visible. The panel then shows "DJI Fly stopped sending" (connection still open) or "publisher disconnected". Keep DJI Fly visible with split screen / a pop-up window, or run DJI Fly on a second phone (setup B). Also keep **Keep running in the background** on. |
+| Goggles N3: no video over USB | Goggles linked to the aircraft? Data cable (not charge-only)? Choose ELRS Telemetry when Android asks; check Settings → Goggles N3 over USB → Status, then **Reconnect USB**. Close DJI Fly so it does not hold the USB connection. |
 | No video | Is the DJI Fly device on the same network? Use a URL from Settings › Video stream (not 127.0.0.1 unless DJI Fly runs on the same device). Check that DJI Fly reports "streaming". |
 
 ## Technical details (verified against the source code)
@@ -242,9 +271,17 @@ permission needed). Open them with a file manager or import them into a spreadsh
 | `RtmpServer.java` | Minimal RTMP ingest server (handshake, chunks, AMF0, FLV H.264/H.265 → Annex-B) |
 | `VideoPanel.java` | MediaCodec decoding of the stream onto a TextureView |
 | `VideoWindow.java` | Floating video window: drag to move, corner handle to resize, FULL/✕ buttons |
+| `n3/*.java` | Goggles N3 USB video: logiclink decoder, H.264 access-unit assembler, subscription packets, USB accessory session (adapted from DJI Unchained VOC, Apache-2.0) |
 | `TelemetryService.java` | Foreground service that keeps the app running while another app is in front |
 | `SettingsDialog.java` | Settings screen |
 | `MainActivity.java` | UDP receiver and GCS screen |
+
+## Third-party code and licences
+
+- `app/src/main/java/com/elrstelemetri/n3/` is adapted from
+  [DJI Unchained VOC](https://github.com/jtm2kfpv-git/DJI-Unchained-VOC), Copyright 2026 JTM2k FPV,
+  Apache License 2.0 — see [NOTICE](NOTICE) and [LICENSE-APACHE-2.0.txt](LICENSE-APACHE-2.0.txt).
+- [osmdroid](https://github.com/osmdroid/osmdroid), Apache License 2.0.
 
 ## Map data
 

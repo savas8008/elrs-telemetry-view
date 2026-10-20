@@ -43,6 +43,12 @@ public class SettingsDialog {
         /** Discards unsaved changes by reloading the stored settings. */
         void reloadSettings();
 
+        /** Goggles N3 USB connection status. */
+        String usbStatus();
+
+        /** Reopens the Goggles N3 USB connection. */
+        void usbReconnect();
+
         /** Starts an offline download of the visible map area. Returns an error message or null. */
         String startOfflineDownload(int maxZoom);
 
@@ -297,7 +303,24 @@ public class SettingsDialog {
     }
 
     private void buildVideo(LinearLayout col) {
-        LinearLayout card = card(col, "VIDEO STREAM (DJI FLY)");
+        LinearLayout usbCard = card(col, "GOGGLES N3 OVER USB (NO DJI FLY)");
+        Switch usbOn = sw(usbCard, "Receive video directly from DJI Goggles N3", s.usbGoggles);
+        hint(usbCard, "Connect the N3 to this device with a USB-C data cable while it is linked to the aircraft. "
+                + "When Android asks which app to open for the DJI accessory, choose ELRS Telemetry. "
+                + "Unofficial: based on the open-source DJI Unchained VOC project; tested by others with "
+                + "N3 + O4 Air Unit Pro / Avata 2, and may stop working after DJI firmware updates.");
+        TextView usbState = label("Status: " + host.usbStatus());
+        usbState.setTextColor(C_LABEL);
+        usbState.setTextSize(12);
+        usbState.setSingleLine(false);
+        usbCard.addView(usbState);
+        usbCard.addView(button("Reconnect USB", false, v -> {
+            host.usbReconnect();
+            usbState.setText("Status: " + host.usbStatus());
+        }));
+        savers.add(() -> s.usbGoggles = usbOn.isChecked());
+
+        LinearLayout card = card(col, "VIDEO STREAM FROM DJI FLY (RTMP)");
         Switch en = sw(card, "Receive video stream (RTMP)", s.videoEnabled);
         Switch keep = sw(card, "Keep running in the background", s.keepRunning);
         hint(card, "Keeps the video receiver, telemetry, alarms and logging running while DJI Fly or another app is "

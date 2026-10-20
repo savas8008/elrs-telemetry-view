@@ -11,6 +11,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Goggles N3 connect as an Android USB accessory -->
+    <uses-feature
+        android:name="android.hardware.usb.accessory"
+        android:required="false" />
+
     <!-- needed on Android 11+ to find and open DJI Fly -->
     <queries>
         <package android:name="dji.go.v5" />
@@ -30,6 +35,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- offer this app when DJI Goggles N3 are plugged in over USB -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED"
+                android:resource="@xml/accessory_filter" />
         </activity>
 
         <!-- keeps the app alive while DJI Fly is in front; connectedDevice: local network devices
