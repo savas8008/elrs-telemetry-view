@@ -24,8 +24,8 @@ jobs:
       - name: Hata özeti (annotation)
         if: failure()
         run: |
-          grep -n -E "FAILED|error:|What went wrong|Exception|Caused by|expected|at com\.elrstelemetri" gradle.log | head -60 > err.txt || true
-          [ -s err.txt ] || tail -60 gradle.log > err.txt
+          L=$(grep -n -m1 -E "FAILED|What went wrong" gradle.log | cut -d: -f1)
+          sed -n "$(( ${L:-1} > 15 ? ${L:-1} - 15 : 1 )),+90p" gradle.log > err.txt
           python3 - <<'PY'
           lines = open('err.txt', encoding='utf-8', errors='replace').read().splitlines()
           chunks = ['\n'.join(lines[i:i+12]) for i in range(0, len(lines), 12)][:9]
