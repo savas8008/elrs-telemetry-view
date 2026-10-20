@@ -1079,18 +1079,18 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         FrameLayout radio = new FrameLayout(this);
         android.widget.ImageView radioBody = new android.widget.ImageView(this);
         radioBody.setImageResource(R.drawable.ic_radio);
-        radio.addView(radioBody, new FrameLayout.LayoutParams(dp(96), dp(96)));
+        radio.addView(radioBody, new FrameLayout.LayoutParams(dp(96), dp(96), Gravity.CENTER));
         android.widget.ImageView radioWaves = new android.widget.ImageView(this);
         radioWaves.setImageResource(R.drawable.ic_radio_waves);
-        radio.addView(radioWaves, new FrameLayout.LayoutParams(dp(96), dp(96)));
+        radio.addView(radioWaves, new FrameLayout.LayoutParams(dp(96), dp(96), Gravity.CENTER));
         android.animation.ObjectAnimator pulse = android.animation.ObjectAnimator.ofFloat(radioWaves, "alpha", 1f, 0.15f);
         pulse.setDuration(900);
         pulse.setRepeatMode(android.animation.ValueAnimator.REVERSE);
         pulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);
         pulse.start();
-        LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(dp(96), dp(96));
-        rl.gravity = Gravity.CENTER_HORIZONTAL;
-        waitCard.addView(radio, rl);
+        // full width (drawing centred inside): a fixed-width child would make the WRAP_CONTENT card
+        // take only that width and squeeze the text
+        waitCard.addView(radio, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(96)));
         TextView wTitle = new TextView(this);
         wTitle.setText("Waiting for connection");
         wTitle.setTextSize(20);
