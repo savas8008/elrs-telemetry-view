@@ -90,9 +90,9 @@ straight into the GCS screen — no internet or streaming service needed.
 
    Controls:
    - **📹** in the bottom bar switches the goggles video **on/off** (blue = on).
-   - **⤢ / ⤡** in the bottom bar (visible while the video is on) switches between the floating panel and
+   - **FULL / PIP** in the bottom bar (visible while the video is on) switches between the floating panel and
      replacing the map.
-   - On the floating panel: **⤢** = replace the map, **✕** = hide, **◢** = resize, drag anywhere else to move.
+   - On the floating panel: **FULL** = replace the map, **✕** = hide, **◢** = resize, drag anywhere else to move.
 
 All URLs of this device are also listed in ⚙ **Settings → Video stream**.
 
@@ -130,7 +130,7 @@ Notes:
 | Bottom | Buttons |
 
 Buttons: **⌖** follow · **🗺** map layer · **⌂** reset home · **⌫** clear track ·
-**📹** video on/off · **⤢/⤡** video panel ↔ replace the map · **▣** show/hide panels · **📊** flight summary · **⚙** settings ·
+**📹** video on/off · **FULL/PIP** video panel ↔ replace the map · **▣** show/hide panels · **📊** flight summary · **⚙** settings ·
 **DJI Fly ▶** copy the stream URL and open DJI Fly
 
 - **Altitude**: barometric altitude if the FC sends it (zeroed at arming), otherwise GPS altitude minus home altitude.
@@ -239,7 +239,7 @@ permission needed). Open them with a file manager or import them into a spreadsh
 | `Alerts.java` | Spoken alarms and vibration |
 | `RtmpServer.java` | Minimal RTMP ingest server (handshake, chunks, AMF0, FLV H.264/H.265 → Annex-B) |
 | `VideoPanel.java` | MediaCodec decoding of the stream onto a TextureView |
-| `VideoWindow.java` | Floating video window: drag to move, corner handle to resize, ⤢/✕ buttons |
+| `VideoWindow.java` | Floating video window: drag to move, corner handle to resize, FULL/✕ buttons |
 | `TelemetryService.java` | Foreground service that keeps the app running while another app is in front |
 | `SettingsDialog.java` | Settings screen |
 | `MainActivity.java` | UDP receiver and GCS screen |

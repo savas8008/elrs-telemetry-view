@@ -378,7 +378,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         if (bVideo != null) {
             ((GradientDrawable) bVideo.getBackground()).setColor(show ? Color.argb(220, 0, 140, 200) : C_PANEL);
             bExpand.setVisibility(show ? View.VISIBLE : View.GONE);
-            bExpand.setText(replace ? "⤡" : "⤢");
+            bExpand.setText(replace ? "PIP" : "FULL");
         }
         if (!show) return;
         if (replace) {
@@ -1046,7 +1046,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             map.clearTrack();
             Toast.makeText(this, "Track cleared", Toast.LENGTH_SHORT).show();
         });
-        // 📹 = goggles video on/off;  ⤢/⤡ = panel ↔ instead of the map (shown only while the video is on)
+        // 📹 = goggles video on/off;  FULL/PIP = panel <-> instead of the map (shown only while the video is on)
         bVideo = mapButton(buttons, "📹", v -> {
             if (!settings.videoEnabled) {
                 Toast.makeText(this, "Video stream is disabled in Settings", Toast.LENGTH_SHORT).show();
@@ -1057,8 +1057,10 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             setVideoMode(on ? shown : Settings.VIDEO_OFF);
             Toast.makeText(this, on ? "Video on" : "Video off", Toast.LENGTH_SHORT).show();
         });
-        bExpand = mapButton(buttons, "⤢", v -> setVideoMode(settings.videoMode == Settings.VIDEO_REPLACE_MAP
+        bExpand = mapButton(buttons, "FULL", v -> setVideoMode(settings.videoMode == Settings.VIDEO_REPLACE_MAP
                 ? Settings.VIDEO_PANEL : Settings.VIDEO_REPLACE_MAP));
+        bExpand.setTextSize(11);
+        bExpand.setTypeface(Typeface.DEFAULT_BOLD);
         mapButton(buttons, "▣", v -> {
             settings.showPanels = !settings.showPanels;
             applyPanelVisibility();

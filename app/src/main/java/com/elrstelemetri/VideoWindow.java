@@ -14,12 +14,12 @@ import android.widget.TextView;
 
 /**
  * Floating container for the video: drag the window to move it, drag the ◢ corner to resize it.
- * Buttons on the window: ⤢ switch to "replace the map", ✕ hide the video. Stays inside its parent.
+ * Buttons on the window: FULL switches to "replace the map", ✕ hides the video. Stays inside its parent.
  */
 public final class VideoWindow extends FrameLayout {
 
     public interface Listener {
-        /** ⤢ pressed: show the video instead of the map. */
+        /** FULL pressed: show the video instead of the map. */
         void onExpand();
 
         /** ✕ pressed: hide the video. */
@@ -65,7 +65,7 @@ public final class VideoWindow extends FrameLayout {
 
         controls = new android.widget.LinearLayout(c);
         controls.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-        controls.addView(controlButton(c, "⤢", () -> {
+        controls.addView(controlButton(c, "FULL", () -> {
             if (listener != null) listener.onExpand();
         }));
         controls.addView(controlButton(c, "✕", () -> {
@@ -77,7 +77,9 @@ public final class VideoWindow extends FrameLayout {
     private TextView controlButton(Context c, String text, Runnable action) {
         TextView b = new TextView(c);
         b.setText(text);
-        b.setTextSize(17);
+        b.setTextSize(text.length() > 1 ? 11 : 17);
+        b.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        b.setPadding(dp(6), 0, dp(6), 0);
         b.setTextColor(Color.WHITE);
         b.setGravity(Gravity.CENTER);
         GradientDrawable bg = new GradientDrawable();
@@ -85,7 +87,9 @@ public final class VideoWindow extends FrameLayout {
         bg.setCornerRadius(dp(6));
         b.setBackground(bg);
         b.setOnClickListener(v -> action.run());
-        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(dp(34), dp(34));
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
+                text.length() > 1 ? android.widget.LinearLayout.LayoutParams.WRAP_CONTENT : dp(34), dp(34));
+        b.setMinWidth(dp(34));
         lp.setMargins(dp(3), dp(3), dp(3), 0);
         b.setLayoutParams(lp);
         return b;
