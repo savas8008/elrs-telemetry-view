@@ -90,7 +90,8 @@ public final class OfflineMapPlanner extends LinearLayout {
         super(c);
         this.host = host;
         setOrientation(VERTICAL);
-        setPadding(dp(8), dp(8), dp(8), dp(8));
+        // bottom gap keeps the map scale bar and the tile attribution visible below the panel
+        setPadding(dp(8), dp(8), dp(8), dp(34));
 
         // ---- Top: title, place search, done
         LinearLayout top = panel(HORIZONTAL);
