@@ -234,7 +234,7 @@ public class SettingsDialog {
     private String estimateText() {
         int n = host.map().tilesForVisibleArea(offlineZoom);
         if (n < 0) return "Visible area: tile count unavailable for this layer";
-        String size = String.format(Locale.US, "%.0f MB", n * (double) GcsMap.APPROX_TILE_KB / 1024);
+        String size = String.format(Locale.US, "%.1f MB", n * (double) GcsMap.APPROX_TILE_KB / 1024);
         String s1 = "Visible area, zoom " + Math.min(host.map().currentZoom(), offlineZoom) + "–" + offlineZoom
                 + ": " + n + " tiles ≈ " + size;
         if (n > GcsMap.MAX_DOWNLOAD_TILES) s1 += "  (too large: zoom in or choose a lower detail level)";

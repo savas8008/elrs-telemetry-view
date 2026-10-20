@@ -441,13 +441,12 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         if (logger.isOpen() && (!recordEnabled || now - lastData > LOG_CLOSE_AFTER_MS)) logger.close();
 
         // ---- Banner
-        List<String> lines = new ArrayList<>();
+        List<String> lines = new ArrayList<>(alarmLines);
         if (!alarmLines.isEmpty() && alerts.isMuted()) {
             lines.add("🔇 muted " + FlightStats.formatDuration(alerts.mutedRemainingMs()) + " · tap to unmute");
         } else if (!alarmLines.isEmpty()) {
-            lines.add("tap to mute 2 min");
+            lines.add("(tap to mute for 2 min)");
         }
-        lines.addAll(alarmLines);
         lines.addAll(notices);
         if (lines.isEmpty()) {
             tWarn.setVisibility(View.GONE);
