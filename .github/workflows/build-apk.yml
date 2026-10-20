@@ -1,7 +1,11 @@
 name: Build APK
 
+# Every push: tests + debug APK as a workflow artifact (no release).
+# Pushing a version tag (v1.0, v1.1, ...): signed release APK published as a GitHub release.
 on:
   push:
+    branches: ['**']
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -60,18 +64,37 @@ jobs:
         with:
           name: ELRS-Telemetry-apk
           path: ELRS-Telemetry-${{ github.run_number }}.apk
+      - name: Signed release APK
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+        run: |
+          if [ -z "$SIGNING_KEYSTORE_B64" ] || [ -z "$SIGNING_PASSWORD" ]; then
+            echo "::error title=signing::Secrets SIGNING_KEYSTORE_B64 and SIGNING_PASSWORD are missing (Settings > Secrets and variables > Actions)"
+            exit 1
+          fi
+          echo "$SIGNING_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.p12"
+          export SIGNING_KEYSTORE="$RUNNER_TEMP/release.p12"
+          ./gradlew --no-daemon assembleRelease
+          rm -f "$RUNNER_TEMP/release.p12"
+          APK=app/build/outputs/apk/release/app-release.apk
+          test -f "$APK" || { echo "::error title=signing::signed release APK was not produced"; exit 1; }
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs "$APK" | head -5
+          cp "$APK" "ELRS-Telemetry-${GITHUB_REF_NAME}.apk"
       - name: Publish release
-        if: github.ref == 'refs/heads/main'
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "build-${{ github.run_number }}" \
-            "ELRS-Telemetry-${{ github.run_number }}.apk" \
+          gh release create "${GITHUB_REF_NAME}" \
+            "ELRS-Telemetry-${GITHUB_REF_NAME}.apk" \
             $( [ -f app/build/screenshots/gcs.png ] && echo "app/build/screenshots/gcs.png#screenshot-gcs.png" ) \
             $( [ -f app/build/screenshots/settings.png ] && echo "app/build/screenshots/settings.png#screenshot-settings.png" ) \
             $( [ -f app/build/screenshots/gcs-full.png ] && echo "app/build/screenshots/gcs-full.png#screenshot-video-full.png" ) \
             $( [ -f app/build/screenshots/waiting.png ] && echo "app/build/screenshots/waiting.png#screenshot-waiting.png" ) \
             $( [ -f app/build/screenshots/offline.png ] && echo "app/build/screenshots/offline.png#screenshot-offline-map.png" ) \
-            --title "ELRS Telemetry - build ${{ github.run_number }}" \
-            --notes "Automatic build (${{ github.sha }}). Download the APK and install it on your phone or tablet." \
+            --title "ELRS Telemetry ${GITHUB_REF_NAME}" \
+            --notes-file release-notes.md \
             --latest

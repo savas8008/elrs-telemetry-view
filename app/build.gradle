@@ -10,13 +10,29 @@ android {
         applicationId 'com.elrstelemetri'
         minSdk 29
         targetSdk 35
-        versionCode 15
-        versionName '0.15'
+        versionCode 16
+        versionName '1.0'
+    }
+
+    // Release signing: the keystore comes from the CI secrets (never from the repository). Every
+    // release must be signed with the same key, otherwise Android refuses to install it as an update.
+    def ks = System.getenv('SIGNING_KEYSTORE')
+    signingConfigs {
+        release {
+            if (ks) {
+                storeFile file(ks)
+                storeType 'pkcs12'
+                storePassword System.getenv('SIGNING_PASSWORD')
+                keyAlias 'elrs'
+                keyPassword System.getenv('SIGNING_PASSWORD')
+            }
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled false
+            if (ks) signingConfig signingConfigs.release
         }
     }
 
