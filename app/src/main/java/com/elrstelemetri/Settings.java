@@ -21,6 +21,13 @@ public class Settings {
     public boolean showPanels = true;
     public int offlineMaxZoom = 17;       // detail level for offline map downloads
 
+    public static final int VIDEO_OFF = 0;
+    public static final int VIDEO_PIP = 1;
+    public static final int VIDEO_FULL = 2;
+    public boolean videoEnabled = true;   // RTMP receiver for DJI Fly live streaming
+    public int videoPort = 1935;
+    public int videoMode = VIDEO_PIP;
+
     public final AlarmSet alarms = new AlarmSet();
 
     // Reopen the map where it was last used
@@ -37,6 +44,9 @@ public class Settings {
         alarmRepeatSec = p.getInt("alarmRepeatSec", alarmRepeatSec);
         showPanels = p.getBoolean("showPanels", showPanels);
         offlineMaxZoom = p.getInt("offlineMaxZoom", offlineMaxZoom);
+        videoEnabled = p.getBoolean("videoEnabled", videoEnabled);
+        videoPort = p.getInt("videoPort", videoPort);
+        videoMode = p.getInt("videoMode", videoMode);
         hasLastPos = p.getBoolean("hasLastPos", false);
         lastLat = Double.longBitsToDouble(p.getLong("lastLat", 0));
         lastLon = Double.longBitsToDouble(p.getLong("lastLon", 0));
@@ -58,6 +68,9 @@ public class Settings {
                 .putInt("alarmRepeatSec", alarmRepeatSec)
                 .putBoolean("showPanels", showPanels)
                 .putInt("offlineMaxZoom", offlineMaxZoom)
+                .putBoolean("videoEnabled", videoEnabled)
+                .putInt("videoPort", videoPort)
+                .putInt("videoMode", videoMode)
                 .putBoolean("hasLastPos", hasLastPos)
                 .putLong("lastLat", Double.doubleToLongBits(lastLat))
                 .putLong("lastLon", Double.doubleToLongBits(lastLon));

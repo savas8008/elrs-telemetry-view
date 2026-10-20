@@ -36,7 +36,7 @@ public class SettingsDialog {
         GcsMap map();
 
         /** Called after settings were saved. */
-        void onSettingsSaved(int oldPort);
+        void onSettingsSaved(int oldPort, boolean oldVideoEnabled, int oldVideoPort);
 
         void showRawData();
 
@@ -123,6 +123,7 @@ public class SettingsDialog {
         buildMap(right);
         buildLogging(right);
         buildAlerts(right);
+        buildVideo(right);
         buildConnection(right);
 
         dialog.setContentView(root);
@@ -295,10 +296,40 @@ public class SettingsDialog {
         });
     }
 
+    private void buildVideo(LinearLayout col) {
+        LinearLayout card = card(col, "VIDEO STREAM (DJI FLY)");
+        Switch en = sw(card, "Receive video stream (RTMP)", s.videoEnabled);
+        LinearLayout row = new LinearLayout(ctx);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.addView(label("RTMP port"), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        EditText port = number(String.valueOf(s.videoPort), false, false);
+        row.addView(port, new LinearLayout.LayoutParams(dp(90), LinearLayout.LayoutParams.WRAP_CONTENT));
+        card.addView(row);
+        hint(card, "In DJI Fly (goggles connected over USB): Live streaming › RTMP, then enter one of these URLs. "
+                + "The device running DJI Fly must be on the same network as this device:");
+        StringBuilder urls = new StringBuilder();
+        for (String u : VideoPanel.streamUrls(s.videoPort)) urls.append(u).append('\n');
+        TextView t = label(urls.toString().trim());
+        t.setSingleLine(false);
+        t.setTypeface(Typeface.MONOSPACE);
+        t.setTextSize(12);
+        t.setTextIsSelectable(true);
+        card.addView(t);
+        hint(card, "Tip: turn on this device's hotspot and connect both the backpack (as its home network) and the "
+                + "phone running DJI Fly to it. See the README for the possible setups.");
+        savers.add(() -> {
+            s.videoEnabled = en.isChecked();
+            int p = (int) parse(port, s.videoPort, "RTMP port");
+            if (p >= 1024 && p <= 65535) s.videoPort = p;
+        });
+    }
+
     private void save() {
         int oldPort = s.port;
+        boolean oldVideo = s.videoEnabled;
+        int oldVideoPort = s.videoPort;
         for (Runnable r : savers) r.run();
-        host.onSettingsSaved(oldPort);
+        host.onSettingsSaved(oldPort, oldVideo, oldVideoPort);
         dialog.dismiss();
         Toast.makeText(ctx, "Settings saved", Toast.LENGTH_SHORT).show();
     }

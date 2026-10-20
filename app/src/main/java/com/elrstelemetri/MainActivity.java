@@ -76,6 +76,9 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     private double rate;
     private String downloadStatus = "";
     private boolean downloading;
+    private VideoPanel videoPanel;
+    private RtmpServer rtmp;
+    private String rtmpError = "";
 
     // Derived values (UI thread)
     private double curRelAlt = Double.NaN, curHeading, curDist = Double.NaN, curCell = Double.NaN;
@@ -114,6 +117,22 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             if (running) {
                 stopReceiver();
                 startReceiver();
+            }
+        });
+        videoPanel = new VideoPanel(this);
+        videoPanel.setCallback(new VideoPanel.Callback() {
+            @Override
+            public void onStreamStarted(String remote) {
+                Toast.makeText(MainActivity.this, "Video stream connected: " + remote, Toast.LENGTH_SHORT).show();
+                if (settings.videoMode == Settings.VIDEO_OFF) {
+                    settings.videoMode = Settings.VIDEO_PIP;
+                    applyVideoMode();
+                }
+            }
+
+            @Override
+            public void onStreamStopped() {
+                Toast.makeText(MainActivity.this, "Video stream ended", Toast.LENGTH_SHORT).show();
             }
         });
         setContentView(buildUi());
@@ -156,6 +175,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         mcLock.acquire();  // some phones drop broadcast packets without this lock
         router.start();
         startReceiver();
+        startVideo();
         ui.post(tick);
         ui.post(logTick);
     }
@@ -165,6 +185,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         ui.removeCallbacks(tick);
         ui.removeCallbacks(logTick);
         stopReceiver();
+        stopVideo();
         router.stop();
         logger.close();
         if (mcLock != null && mcLock.isHeld()) mcLock.release();
@@ -174,6 +195,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     @Override
     protected void onDestroy() {
         alerts.shutdown();
+        videoPanel.release();
         super.onDestroy();
     }
 
@@ -245,6 +267,47 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             rawLines.addFirst(sb.toString());
             while (rawLines.size() > 14) rawLines.removeLast();
         }
+    }
+
+    // ================================================================ Video (RTMP)
+
+    private void startVideo() {
+        stopVideo();
+        if (!settings.videoEnabled) return;
+        rtmp = new RtmpServer(settings.videoPort, videoPanel);
+        try {
+            rtmp.start();
+            rtmpError = "";
+        } catch (Exception e) {
+            rtmpError = "RTMP port " + settings.videoPort + ": " + e.getMessage();
+            rtmp = null;
+        }
+    }
+
+    private void stopVideo() {
+        if (rtmp != null) rtmp.stop();
+        rtmp = null;
+    }
+
+    private String primaryStreamUrl() {
+        List<String> urls = VideoPanel.streamUrls(settings.videoPort);
+        String u = urls.get(0);
+        int sp = u.indexOf(' ');
+        return sp > 0 ? u.substring(0, sp) : u;
+    }
+
+    private void applyVideoMode() {
+        boolean show = settings.videoEnabled && settings.videoMode != Settings.VIDEO_OFF;
+        videoPanel.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (!show) return;
+        FrameLayout.LayoutParams lp;
+        if (settings.videoMode == Settings.VIDEO_FULL) {
+            lp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
+        } else {
+            lp = new FrameLayout.LayoutParams(dp(320), dp(180), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            lp.setMargins(0, 0, 0, dp(58));
+        }
+        videoPanel.setLayoutParams(lp);
     }
 
     // ================================================================ Update loops
@@ -418,6 +481,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             else info.append("No GPS position");
             if (logger.isOpen()) info.append("\n").append(logger.fileName).append(" (").append(logger.rows).append(" rows)");
             if (downloading) info.append("\n").append(downloadStatus);
+            if (settings.videoEnabled && videoPanel.isLive()) info.append("\nVideo: ").append(videoPanel.describe());
             tInfo.setText(info);
 
             // ---- Notices (not alarms)
@@ -429,6 +493,12 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
                 notices.add("Packets arrive but contain no CRSF frames — Settings › Show raw UDP data");
             }
         }
+
+        videoPanel.setIdleText(rtmpError.isEmpty()
+                ? "Video: waiting for DJI Fly stream\n" + primaryStreamUrl() + "\n(⚙ Settings › Video stream for all URLs)"
+                : rtmpError);
+        videoPanel.refresh(now);
+        if (!rtmpError.isEmpty()) notices.add(rtmpError);
 
         // Logging on/off
         long lastData;
@@ -524,7 +594,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     }
 
     @Override
-    public void onSettingsSaved(int oldPort) {
+    public void onSettingsSaved(int oldPort, boolean oldVideoEnabled, int oldVideoPort) {
         map.setMapType(settings.mapType);
         recordEnabled = settings.autoRecord;
         settings.save(prefs);
@@ -532,6 +602,8 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             stopReceiver();
             startReceiver();
         }
+        if (settings.videoEnabled != oldVideoEnabled || settings.videoPort != oldVideoPort) startVideo();
+        applyVideoMode();
     }
 
     @Override
@@ -693,6 +765,12 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         root.setBackgroundColor(Color.BLACK);
         root.addView(map.view, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
+        // Video sits above the map and below the panels, so in full-screen mode telemetry overlays the video
+        root.addView(videoPanel);
+        videoPanel.setOnClickListener(v -> {
+            settings.videoMode = settings.videoMode == Settings.VIDEO_FULL ? Settings.VIDEO_PIP : Settings.VIDEO_FULL;
+            applyVideoMode();
+        });
 
         // ---- Top bar
         LinearLayout top = new LinearLayout(this);
@@ -834,6 +912,16 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             map.clearTrack();
             Toast.makeText(this, "Track cleared", Toast.LENGTH_SHORT).show();
         });
+        mapButton(buttons, "📹", v -> {
+            if (!settings.videoEnabled) {
+                Toast.makeText(this, "Video stream is disabled in Settings", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            settings.videoMode = (settings.videoMode + 1) % 3;
+            applyVideoMode();
+            String[] names = {"Video hidden", "Video: picture-in-picture", "Video: full screen"};
+            Toast.makeText(this, names[settings.videoMode], Toast.LENGTH_SHORT).show();
+        });
         mapButton(buttons, "▣", v -> {
             settings.showPanels = !settings.showPanels;
             applyPanelVisibility();
@@ -847,6 +935,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
 
         updateFollowButton();
         applyPanelVisibility();
+        applyVideoMode();
         return root;
     }
 

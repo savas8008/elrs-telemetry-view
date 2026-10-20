@@ -33,6 +33,8 @@ radio's telemetry **on a map**. No MAVLink needed: it reads the CRSF telemetry t
   RF mode, satellites, flight mode, arm state
 - **Altitude and voltage charts** (last 5 minutes)
 - **Configurable alarms** with on-screen banner, voice and vibration (see [Alarms](#alarms))
+- **Live video from DJI Fly** (RTMP): picture-in-picture or full screen with telemetry overlaid
+  (see [Video stream](#video-stream-dji-fly))
 - **Flight log (CSV)**: on by default, starts automatically when telemetry arrives
 - **Flight summary**: duration, max altitude, max distance, max speed/current, min cell voltage
 - Landscape, full screen, screen stays on
@@ -67,6 +69,36 @@ Notes:
 - If mobile data happens to be available while on the backpack WiFi, the app uses it for map tiles
   automatically. The top bar shows the source: `map: mobile data`, `map: offline cache` or `map: WiFi internet`.
 
+## Video stream (DJI Fly)
+
+DJI Fly can live-stream the goggles' view to a custom **RTMP** address while the goggles are
+connected to the phone over USB. This app contains a small RTMP receiver, so DJI Fly can stream
+straight into the GCS screen — no internet or streaming service needed.
+
+1. In the app: ⚙ **Settings → Video stream** shows the URLs of this device, e.g.
+   `rtmp://192.168.43.1:1935/live/dji`.
+2. In DJI Fly: **Live streaming → RTMP**, enter that URL and start streaming.
+3. The video appears as picture-in-picture above the buttons. **📹** cycles hidden / picture-in-picture /
+   full screen; tapping the video toggles picture-in-picture and full screen. In full screen the
+   telemetry panels are overlaid on the video.
+
+H.264 and H.265 (Enhanced RTMP) are supported; audio is ignored. Decoding uses the hardware decoder in
+low-latency mode where available.
+
+**Both devices must be on the same network.** Possible setups:
+
+| Setup | How | Notes |
+|---|---|---|
+| **A. One device** | DJI Fly and this app on the same phone/tablet (goggles on USB). URL `rtmp://127.0.0.1:1935/live/dji`. | Use split-screen so both apps stay active; whether DJI Fly keeps streaming in the background has not been verified. |
+| **B. Hotspot on the GCS tablet (recommended for two devices)** | Turn on the tablet's hotspot. Set it as the backpack's **home network** (connect to the backpack WiFi, open `http://10.0.0.1`, enter the hotspot SSID/password; or set the backpack's WiFi SSID/password when flashing with the Configurator). Connect the DJI Fly phone to the same hotspot. URL `rtmp://<tablet hotspot IP>:1935/live/dji` (shown in Settings). | The backpack then broadcasts telemetry on the hotspot network. If the tablet has mobile data, the hotspot can also give the map internet. If the backpack can't find the home network it falls back to its own access point after ~30 s. |
+| C. Both on the backpack WiFi | Connect the DJI Fly phone to the backpack WiFi too. | Not recommended: the backpack's small ESP32 access point has to relay the video and may not have the bandwidth. |
+
+Notes:
+- RTMP live streaming with goggles over USB is **community-reported**, not documented by DJI;
+  availability depends on your goggles, aircraft/air unit and DJI Fly version.
+- The receiver accepts any stream key; a new stream replaces the previous one.
+- The receiver runs while the app is open (port 1935 by default; configurable).
+
 ## Screen
 
 | Area | Content |
@@ -78,7 +110,7 @@ Notes:
 | Bottom | Coordinates, log file, download progress; buttons |
 
 Buttons: **⌖** follow · **🗺** map layer · **⌂** reset home · **⌫** clear track ·
-**▣** show/hide panels · **📊** flight summary · **⚙** settings
+**📹** video hidden / picture-in-picture / full screen · **▣** show/hide panels · **📊** flight summary · **⚙** settings
 
 - **Altitude**: barometric altitude if the FC sends it (zeroed at arming), otherwise GPS altitude minus home altitude.
 - **Home**: taken automatically at the first GPS fix with 6 or more satellites.
@@ -135,6 +167,7 @@ permission needed). Open them with a file manager or import them into a spreadsh
 | Vibrate on alarm | on |
 | Alarm repeat interval | 15 s |
 | UDP port | 14550 |
+| Video stream receiver | on, RTMP port 1935, picture-in-picture |
 
 **Settings → Show raw UDP data** shows incoming packets for troubleshooting.
 
@@ -148,6 +181,7 @@ permission needed). Open them with a file manager or import them into a spreadsh
 | Map is empty/grey | The area was not downloaded. Download it before connecting to the backpack WiFi. |
 | No position | Is GPS enabled on the aircraft with GPS telemetry, with enough satellites? |
 | No voice | Install/enable an English voice in Android's text-to-speech settings. |
+| No video | Is the DJI Fly device on the same network? Use a URL from Settings › Video stream (not 127.0.0.1 unless DJI Fly runs on the same device). Check that DJI Fly reports "streaming". |
 
 ## Technical details (verified against the source code)
 
@@ -164,7 +198,8 @@ permission needed). Open them with a file manager or import them into a spreadsh
 - **GitHub Actions**: every push to `main` runs the tests, builds the APK, renders screenshots and
   publishes them to **Releases**.
 - **Android Studio**: open the folder and press ▶ Run.
-- Tests: `./gradlew testDebugUnitTest`
+- Tests: `./gradlew testDebugUnitTest` (the RTMP end-to-end tests publish H.264 and H.265 test streams
+  with ffmpeg and decode the received video; they are skipped if ffmpeg is not installed)
 
 ## Code layout
 
@@ -179,6 +214,8 @@ permission needed). Open them with a file manager or import them into a spreadsh
 | `NetRouter.java` | Binds telemetry to WiFi and routes map traffic to mobile data when available |
 | `HorizonView.java`, `BatteryView.java`, `SparklineView.java` | Instruments |
 | `Alerts.java` | Spoken alarms and vibration |
+| `RtmpServer.java` | Minimal RTMP ingest server (handshake, chunks, AMF0, FLV H.264/H.265 → Annex-B) |
+| `VideoPanel.java` | MediaCodec decoding of the stream onto a TextureView |
 | `SettingsDialog.java` | Settings screen |
 | `MainActivity.java` | UDP receiver and GCS screen |
 
