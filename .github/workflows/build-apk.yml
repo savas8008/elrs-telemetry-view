@@ -18,10 +18,30 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
       - name: Test ve debug APK
-        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon testDebugUnitTest assembleDebug 2>&1 | tee gradle.log
+      - name: Hata özeti (annotation)
+        if: failure()
+        run: |
+          grep -n -E "FAILED|error:|What went wrong|Exception|Caused by|expected|at com\.elrstelemetri" gradle.log | head -60 > err.txt || true
+          [ -s err.txt ] || tail -60 gradle.log > err.txt
+          python3 - <<'PY'
+          lines = open('err.txt', encoding='utf-8', errors='replace').read().splitlines()
+          chunks = ['\n'.join(lines[i:i+12]) for i in range(0, len(lines), 12)][:9]
+          for c in chunks:
+              print('::error title=gradle::' + c.replace('%', '%25').replace('\r', '').replace('\n', '%0A'))
+          PY
       - name: GCS ekran görüntüsü (Robolectric)
         continue-on-error: true
-        run: ./gradlew --no-daemon testDebugUnitTest --tests '*GcsScreenshotTest*' -Pscreenshots=true
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon testDebugUnitTest --tests '*GcsScreenshotTest*' -Pscreenshots=true 2>&1 | tee shot.log || {
+            python3 -c "
+          import re
+          L=[l for l in open('shot.log',errors='replace').read().splitlines() if re.search(r'FAILED|Exception|Caused by|at com\.elrstelemetri|at org\.osmdroid|error', l)][:40]
+          for i in range(0,len(L),10): print('::warning title=screenshot::'+'%0A'.join(x.replace('%','%25') for x in L[i:i+10]))
+          "; exit 1; }
       - name: APK'yı yeniden adlandır
         run: cp app/build/outputs/apk/debug/app-debug.apk ELRS-Telemetri-${{ github.run_number }}.apk
       - uses: actions/upload-artifact@v4
