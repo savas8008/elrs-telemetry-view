@@ -138,7 +138,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             public void onStreamStarted() {
                 videoPanel.onConnected();
                 Toast.makeText(MainActivity.this, settings.videoMode == Settings.VIDEO_OFF
-                        ? "Goggles video connected — tap 📷 to show it" : "Goggles video connected",
+                        ? "Goggles video connected — tap 🥽 to show it" : "Goggles video connected",
                         Toast.LENGTH_SHORT).show();
             }
 
@@ -360,7 +360,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
 
     // ================================================================ Goggles video
 
-    /** Connect button / camera panel: (re)connect the goggles or explain how to plug them in. */
+    /** Connect button / goggles panel: (re)connect the goggles or explain how to plug them in. */
     private void connectGoggles() {
         if (!n3.accessoryPresent()) {
             new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
@@ -1018,8 +1018,8 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             map.clearTrack();
             Toast.makeText(this, "Track cleared", Toast.LENGTH_SHORT).show();
         });
-        // 📷 = goggles video panel on/off;  FULL/PIP = panel <-> instead of the map (shown while the video is on)
-        bVideo = mapButton(buttons, "📷", v -> {
+        // 🥽 = goggles video panel on/off;  FULL/PIP = panel <-> instead of the map (shown while the video is on)
+        bVideo = mapButton(buttons, "🥽", v -> {
             boolean on = settings.videoMode == Settings.VIDEO_OFF;
             int shown = settings.videoShownMode == Settings.VIDEO_OFF ? Settings.VIDEO_PANEL : settings.videoShownMode;
             setVideoMode(on ? shown : Settings.VIDEO_OFF);

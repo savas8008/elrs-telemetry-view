@@ -74,7 +74,7 @@ Notes:
 The app shows the live video directly from **DJI Goggles N3** over a USB-C cable — no DJI Fly, no
 network streaming.
 
-1. Tap **📷** in the bottom bar. The video panel opens.
+1. Tap **🥽** in the bottom bar. The video panel opens.
 2. If the goggles are not connected yet, the panel says so and offers **Connect**:
    - Turn on the goggles and link them to the aircraft (live view on the goggles).
    - Connect the goggles to this phone/tablet with a **USB-C data cable** (not charge-only).
@@ -88,7 +88,7 @@ network streaming.
    - **Replace the map**: the video fills the screen and the telemetry panels are overlaid on it.
 
 Controls:
-- **📷** in the bottom bar opens/closes the video panel (blue = open).
+- **🥽** in the bottom bar opens/closes the video panel (blue = open).
 - **FULL / PIP** in the bottom bar (visible while the panel is open) switches between the floating
   panel and replacing the map.
 - On the floating panel: **FULL** = replace the map, **✕** = close, **◢** = resize, drag anywhere else to move.
@@ -123,7 +123,7 @@ USB for video.
 | Bottom | Buttons |
 
 Buttons: **⌖** follow · **🗺** map layer · **⌂** reset home · **⌫** clear track ·
-**📷** goggles video panel · **FULL/PIP** video panel ↔ replace the map · **▣** show/hide panels · **📊** flight summary · **⚙** settings
+**🥽** goggles video panel · **FULL/PIP** video panel ↔ replace the map · **▣** show/hide panels · **📊** flight summary · **⚙** settings
 
 - **Altitude**: barometric altitude if the FC sends it (zeroed at arming), otherwise GPS altitude minus home altitude.
 - **Home**: taken automatically at the first GPS fix with 6 or more satellites.

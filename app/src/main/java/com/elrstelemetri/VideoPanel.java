@@ -72,7 +72,7 @@ public final class VideoPanel extends FrameLayout implements TextureView.Surface
         overlay.setBackgroundColor(Color.BLACK);  // opaque: never leave a frozen last frame visible
         overlay.setPadding(dp(12), dp(8), dp(12), dp(8));
         TextView icon = new TextView(c);
-        icon.setText("📷");
+        icon.setText("🥽");
         icon.setTextSize(26);
         icon.setGravity(Gravity.CENTER);
         overlay.addView(icon);
