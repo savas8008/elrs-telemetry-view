@@ -23,6 +23,16 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew --no-daemon testDebugUnitTest assembleDebug 2>&1 | tee gradle.log
+      - name: Test summary (annotation)
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          for f in sorted(glob.glob('app/build/test-results/testDebugUnitTest/*.xml')):
+              r = ET.parse(f).getroot()
+              print('::notice title=tests::%s tests=%s failures=%s errors=%s skipped=%s' % (
+                  r.get('name').split('.')[-1], r.get('tests'), r.get('failures'), r.get('errors'), r.get('skipped')))
+          PY
       - name: Error summary (annotation)
         if: failure()
         run: |
