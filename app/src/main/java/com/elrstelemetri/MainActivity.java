@@ -372,8 +372,8 @@ public class MainActivity extends Activity {
             setText(vPower, String.format(Locale.US, "%.0f W", s.voltage * s.current), C_TEXT, !battFresh);
             setText(vSnr, s.snr + " dB", C_TEXT, ls);
             setText(vTxPow, s.txPowerMw >= 0 ? s.txPowerMw + " mW" : "?", C_TEXT, ls);
-            setText(vDown, s.downRssi + " dBm · " + s.downLq + "%", C_TEXT, ls);
-            setText(vRf, "Ant " + (s.antenna + 1) + " · RF " + s.rfMode, C_TEXT, ls);
+            setText(vDown, s.downRssi + "dBm " + s.downLq + "%", C_TEXT, ls);
+            setText(vRf, "A" + (s.antenna + 1) + " · RF" + s.rfMode, C_TEXT, ls);
             sparkAlt.set(stats.altHistory, stats.historyCount, stats.historyPos);
             sparkVolt.set(stats.voltHistory, stats.historyCount, stats.historyPos);
 

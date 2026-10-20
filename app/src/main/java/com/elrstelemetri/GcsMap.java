@@ -97,7 +97,10 @@ public class GcsMap {
         view.getOverlays().add(track);
         view.getOverlays().add(planeOverlay);
         view.getOverlays().add(scale);
-        view.getOverlays().add(new CopyrightOverlay(c));
+        CopyrightOverlay copyright = new CopyrightOverlay(c);
+        copyright.setAlignRight(true);  // sol alt köşe koordinat kutusuna ayrıldı
+        copyright.setAlignBottom(true);
+        view.getOverlays().add(copyright);
 
         // Kullanıcı haritayı sürüklerse takip modunu kapat
         view.setOnTouchListener((v, e) -> {
