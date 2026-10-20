@@ -3,8 +3,6 @@ package com.elrstelemetri;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
-import android.content.ClipData;
-import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -92,8 +90,6 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     private VideoPanel videoPanel;
     private VideoWindow videoWindow;
     private FrameLayout gcsRoot;
-    private RtmpServer rtmp;
-    private String rtmpError = "";
 
     // Derived values (UI thread)
     private double curRelAlt = Double.NaN, curHeading, curDist = Double.NaN, curCell = Double.NaN;
@@ -135,24 +131,15 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             }
         });
         videoPanel = new VideoPanel(this);
-        videoPanel.setCallback(new VideoPanel.Callback() {
-            @Override
-            public void onStreamStarted(String remote) {
-                Toast.makeText(MainActivity.this, settings.videoMode == Settings.VIDEO_OFF
-                        ? "Video stream connected — tap 📹 to show it" : "Video stream connected: " + remote,
-                        Toast.LENGTH_SHORT).show();
-            }
-
-            @Override
-            public void onStreamStopped() {
-                Toast.makeText(MainActivity.this, "Video stream ended", Toast.LENGTH_SHORT).show();
-            }
-        });
-        // Video straight from Goggles N3 over USB, decoded by the same video panel as RTMP
+        videoPanel.setCallback(this::connectGoggles);
+        // Video straight from DJI Goggles N3 over USB
         n3 = new N3UsbLink(this, new N3UsbLink.Listener() {
             @Override
             public void onStreamStarted() {
-                videoPanel.onPublish("usb", "n3", "Goggles N3 (USB)");
+                videoPanel.onConnected();
+                Toast.makeText(MainActivity.this, settings.videoMode == Settings.VIDEO_OFF
+                        ? "Goggles video connected — tap 📷 to show it" : "Goggles video connected",
+                        Toast.LENGTH_SHORT).show();
             }
 
             @Override
@@ -161,7 +148,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
                         && (!java.util.Arrays.equals(au.sps, n3Sps) || !java.util.Arrays.equals(au.pps, n3Pps))) {
                     n3Sps = au.sps;
                     n3Pps = au.pps;
-                    videoPanel.onVideoConfig(RtmpServer.MIME_AVC, au.sps, au.pps);
+                    videoPanel.onVideoConfig(au.sps, au.pps);
                 }
                 if (n3Sps != null) videoPanel.onVideoFrame(au.data, android.os.SystemClock.elapsedRealtime(), au.keyFrame);
             }
@@ -170,7 +157,9 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             public void onStreamStopped(String reason) {
                 n3Sps = null;
                 n3Pps = null;
-                videoPanel.onDisconnect("Goggles N3: " + reason);
+                videoPanel.onDisconnected(reason);
+                ui.post(() -> Toast.makeText(MainActivity.this, "Goggles video ended: " + reason,
+                        Toast.LENGTH_SHORT).show());
             }
         });
         launchIntent = getIntent();
@@ -210,7 +199,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         handleExit(intent);
-        if (settings.usbGoggles) n3.handleIntent(intent);  // goggles plugged in while the app runs
+        n3.handleIntent(intent);  // goggles plugged in while the app runs
     }
 
     /** "Exit" from the notification: stop everything and close. */
@@ -259,7 +248,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     @Override
     protected void onStop() {
         // With "keep running" on, telemetry, alarms, logging and the video receiver continue while
-        // another app (e.g. DJI Fly) is in front; the foreground service keeps the process alive.
+        // another app is in front or the screen is off; the foreground service keeps the process alive.
         if (!settings.keepRunning && !isChangingConfigurations()) stopAll();
         super.onStop();
     }
@@ -282,8 +271,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         mcLock.acquire();  // some phones drop broadcast packets without this lock
         router.start();
         startReceiver();
-        if (rtmp == null) startVideo();
-        if (settings.usbGoggles) n3.start(launchIntent);
+        n3.start(launchIntent);
         ui.post(tick);
         ui.post(logTick);
     }
@@ -294,7 +282,6 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         ui.removeCallbacks(tick);
         ui.removeCallbacks(logTick);
         stopReceiver();
-        stopVideo();
         n3.stop();
         router.stop();
         logger.close();
@@ -371,31 +358,23 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         }
     }
 
-    // ================================================================ Video (RTMP)
+    // ================================================================ Goggles video
 
-    private void startVideo() {
-        stopVideo();
-        if (!settings.videoEnabled) return;
-        rtmp = new RtmpServer(settings.videoPort, videoPanel);
-        try {
-            rtmp.start();
-            rtmpError = "";
-        } catch (Exception e) {
-            rtmpError = "RTMP port " + settings.videoPort + ": " + e.getMessage();
-            rtmp = null;
+    /** Connect button / camera panel: (re)connect the goggles or explain how to plug them in. */
+    private void connectGoggles() {
+        if (!n3.accessoryPresent()) {
+            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("Connect the goggles")
+                    .setMessage("No DJI goggles found on USB.\n\n"
+                            + "1. Turn on DJI Goggles N3 and link them to the aircraft.\n"
+                            + "2. Connect the goggles to this device with a USB-C data cable.\n"
+                            + "3. When Android asks which app to open, choose ELRS Telemetry.")
+                    .setPositiveButton("OK", null)
+                    .show();
+            return;
         }
-    }
-
-    private void stopVideo() {
-        if (rtmp != null) rtmp.stop();
-        rtmp = null;
-    }
-
-    private String primaryStreamUrl() {
-        List<String> urls = VideoPanel.streamUrls(settings.videoPort);
-        String u = urls.get(0);
-        int sp = u.indexOf(' ');
-        return sp > 0 ? u.substring(0, sp) : u;
+        n3.reconnect();
+        Toast.makeText(this, "Connecting to the goggles…", Toast.LENGTH_SHORT).show();
     }
 
     private void setVideoMode(int mode) {
@@ -406,7 +385,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     }
 
     private void applyVideoMode() {
-        boolean show = settings.videoEnabled && settings.videoMode != Settings.VIDEO_OFF;
+        boolean show = settings.videoMode != Settings.VIDEO_OFF;
         boolean replace = show && settings.videoMode == Settings.VIDEO_REPLACE_MAP;
         videoWindow.setVisibility(show ? View.VISIBLE : View.GONE);
         map.view.setVisibility(replace ? View.INVISIBLE : View.VISIBLE);
@@ -435,59 +414,6 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             int w = dp(p[0]), h = dp(p[1]);
             videoWindow.setGeometry((pw - w) / 2, ph - h - dp(58), w, h);
         }
-    }
-
-    /** Copies the RTMP URL and opens DJI Fly, or explains how to connect if that isn't possible. */
-    private void openDjiFly() {
-        String djiPackage = "dji.go.v5";
-        Intent launch = getPackageManager().getLaunchIntentForPackage(djiPackage);
-        boolean sameDevice = launch != null;
-        // DJI Fly on this device streams to localhost; on another device it needs this device's network address
-        String url = sameDevice ? "rtmp://127.0.0.1:" + settings.videoPort + "/live/dji" : primaryStreamUrl();
-        ClipboardManager cb = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        if (cb != null) cb.setPrimaryClip(ClipData.newPlainText("RTMP URL", url));
-        if (!settings.videoEnabled) {
-            settings.videoEnabled = true;
-            settings.save(prefs);
-            startVideo();
-        }
-        if (settings.videoMode == Settings.VIDEO_OFF) {
-            settings.videoMode = Settings.VIDEO_PANEL;
-            applyVideoMode();
-        }
-
-        AlertDialog.Builder b = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Stream from DJI Fly");
-        if (sameDevice) {
-            b.setMessage("RTMP URL copied to the clipboard:\n\n" + url
-                    + "\n\nIn DJI Fly: Live streaming › RTMP › paste the URL and start streaming."
-                    + "\n\nImportant: DJI Fly stops sending video when it is not visible. Keep both apps on "
-                    + "screen with split screen (Recent apps › DJI Fly icon › Split screen) or a pop-up "
-                    + "window. You can make DJI Fly's part small. For the most reliable setup run DJI Fly on a "
-                    + "second phone (see the README).")
-                    .setPositiveButton("Open DJI Fly", (d, w) -> {
-                        // ask for the adjacent split-screen window; large screens may open split screen directly
-                        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT
-                                | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
-                        try {
-                            startActivity(launch);
-                        } catch (Exception e) {
-                            Toast.makeText(this, "Could not open DJI Fly: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                        }
-                    })
-                    .setNegativeButton("Cancel", null);
-        } else {
-            StringBuilder all = new StringBuilder();
-            for (String u : VideoPanel.streamUrls(settings.videoPort)) {
-                if (!u.contains("127.0.0.1")) all.append(u).append('\n');
-            }
-            b.setMessage("DJI Fly is not installed on this device, so it can't be opened from here.\n\n"
-                    + "On the phone connected to the goggles, open DJI Fly › Live streaming › RTMP and enter "
-                    + "this URL (copied to the clipboard):\n\n" + url
-                    + "\n\nBoth devices must be on the same network. All addresses of this device:\n" + all)
-                    .setPositiveButton("OK", null);
-        }
-        b.show();
     }
 
     // ================================================================ Update loops
@@ -661,7 +587,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             else info.append("No GPS position");
             if (logger.isOpen()) info.append("\n").append(logger.fileName).append(" (").append(logger.rows).append(" rows)");
             if (downloading) info.append("\n").append(downloadStatus);
-            if (settings.videoEnabled && videoPanel.isLive()) info.append("\nVideo: ").append(videoPanel.describe());
+            if (videoPanel.isLive()) info.append("\nVideo: ").append(videoPanel.describe());
             tInfo.setText(info);
 
             // ---- Notices (not alarms)
@@ -674,15 +600,9 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             }
         }
 
-        String idle = settings.usbGoggles ? "Goggles N3 (USB): " + n3.status() + "\n" : "";
-        idle += rtmpError.isEmpty() ? "DJI Fly RTMP: " + primaryStreamUrl() : rtmpError;
-        videoPanel.setIdleText(idle);
+        videoPanel.setLinkStatus(n3.status());
         videoPanel.refresh(now);
-        if (settings.videoEnabled && videoPanel.isStalled()) {
-            notices.add(videoPanel.isUsbSource() ? "No video from the goggles — check the goggles' link to the aircraft"
-                    : "DJI Fly stopped sending video — keep DJI Fly visible (split screen) or use a second phone");
-        }
-        if (!rtmpError.isEmpty()) notices.add(rtmpError);
+        if (videoPanel.isStalled()) notices.add("No video from the goggles — check the goggles' link to the aircraft");
 
         // Logging on/off
         long lastData;
@@ -778,7 +698,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     }
 
     @Override
-    public void onSettingsSaved(int oldPort, boolean oldVideoEnabled, int oldVideoPort) {
+    public void onSettingsSaved(int oldPort) {
         map.setMapType(settings.mapType);
         recordEnabled = settings.autoRecord;
         settings.save(prefs);
@@ -786,20 +706,17 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             stopReceiver();
             startReceiver();
         }
-        if (settings.videoEnabled != oldVideoEnabled || settings.videoPort != oldVideoPort) startVideo();
-        if (settings.usbGoggles) n3.start(null);
-        else n3.stop();
         applyVideoMode();
     }
 
     @Override
     public String usbStatus() {
-        return settings.usbGoggles ? n3.status() + (n3.identity().isEmpty() ? "" : "\n" + n3.identity()) : "off";
+        return n3.status() + (n3.identity().isEmpty() ? "" : "\n" + n3.identity());
     }
 
     @Override
     public void usbReconnect() {
-        if (settings.usbGoggles) n3.reconnect();
+        connectGoggles();
     }
 
     @Override
@@ -1101,16 +1018,14 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             map.clearTrack();
             Toast.makeText(this, "Track cleared", Toast.LENGTH_SHORT).show();
         });
-        // 📹 = goggles video on/off;  FULL/PIP = panel <-> instead of the map (shown only while the video is on)
-        bVideo = mapButton(buttons, "📹", v -> {
-            if (!settings.videoEnabled) {
-                Toast.makeText(this, "Video stream is disabled in Settings", Toast.LENGTH_SHORT).show();
-                return;
-            }
+        // 📷 = goggles video panel on/off;  FULL/PIP = panel <-> instead of the map (shown while the video is on)
+        bVideo = mapButton(buttons, "📷", v -> {
             boolean on = settings.videoMode == Settings.VIDEO_OFF;
             int shown = settings.videoShownMode == Settings.VIDEO_OFF ? Settings.VIDEO_PANEL : settings.videoShownMode;
             setVideoMode(on ? shown : Settings.VIDEO_OFF);
-            Toast.makeText(this, on ? "Video on" : "Video off", Toast.LENGTH_SHORT).show();
+            if (on && !n3.isStreaming() && !n3.accessoryPresent()) {
+                Toast.makeText(this, "Connect the goggles with a USB-C cable", Toast.LENGTH_SHORT).show();
+            }
         });
         bExpand = mapButton(buttons, "FULL", v -> setVideoMode(settings.videoMode == Settings.VIDEO_REPLACE_MAP
                 ? Settings.VIDEO_PANEL : Settings.VIDEO_REPLACE_MAP));
@@ -1122,18 +1037,6 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         });
         mapButton(buttons, "📊", v -> showSummary());
         mapButton(buttons, "⚙", v -> showSettings());
-        TextView dji = new TextView(this);
-        dji.setText("DJI Fly ▶");
-        dji.setTextSize(14);
-        dji.setTypeface(Typeface.DEFAULT_BOLD);
-        dji.setTextColor(Color.WHITE);
-        dji.setGravity(Gravity.CENTER);
-        dji.setPadding(dp(12), 0, dp(12), 0);
-        dji.setBackground(roundBg(Color.argb(220, 30, 30, 34), 22));
-        dji.setOnClickListener(v -> openDjiFly());
-        LinearLayout.LayoutParams djl = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(40));
-        djl.setMargins(dp(8), 0, dp(4), 0);
-        buttons.addView(dji, djl);
         FrameLayout.LayoutParams bl = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         bl.setMargins(0, 0, 0, dp(8));

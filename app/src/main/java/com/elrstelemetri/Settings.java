@@ -25,12 +25,9 @@ public class Settings {
     public static final int VIDEO_PANEL = 1;       // floating, movable, resizable panel
     public static final int VIDEO_REPLACE_MAP = 2; // video fills the screen instead of the map
     public static final String[] VIDEO_MODE_NAMES = {"Hidden", "Floating panel", "Replace the map"};
-    public boolean videoEnabled = true;   // RTMP receiver for DJI Fly live streaming
-    public int videoPort = 1935;
     public int videoMode = VIDEO_PANEL;
     public int videoShownMode = VIDEO_PANEL;  // mode restored when the video is switched back on
     public boolean keepRunning = true;        // foreground service: keep working while another app is open
-    public boolean usbGoggles = true;         // video straight from Goggles N3 over USB (no DJI Fly)
     /** Floating panel geometry as fractions of the screen; negative = default. */
     public float videoX = -1, videoY = -1, videoW = -1, videoH = -1;
 
@@ -54,12 +51,9 @@ public class Settings {
         alarmRepeatSec = p.getInt("alarmRepeatSec", alarmRepeatSec);
         showPanels = p.getBoolean("showPanels", showPanels);
         offlineMaxZoom = p.getInt("offlineMaxZoom", offlineMaxZoom);
-        videoEnabled = p.getBoolean("videoEnabled", videoEnabled);
-        videoPort = p.getInt("videoPort", videoPort);
         videoMode = p.getInt("videoMode", videoMode);
         videoShownMode = p.getInt("videoShownMode", videoShownMode);
         keepRunning = p.getBoolean("keepRunning", keepRunning);
-        usbGoggles = p.getBoolean("usbGoggles", usbGoggles);
         videoX = p.getFloat("videoX", -1);
         videoY = p.getFloat("videoY", -1);
         videoW = p.getFloat("videoW", -1);
@@ -85,12 +79,9 @@ public class Settings {
                 .putInt("alarmRepeatSec", alarmRepeatSec)
                 .putBoolean("showPanels", showPanels)
                 .putInt("offlineMaxZoom", offlineMaxZoom)
-                .putBoolean("videoEnabled", videoEnabled)
-                .putInt("videoPort", videoPort)
                 .putInt("videoMode", videoMode)
                 .putInt("videoShownMode", videoShownMode)
                 .putBoolean("keepRunning", keepRunning)
-                .putBoolean("usbGoggles", usbGoggles)
                 .putFloat("videoX", videoX)
                 .putFloat("videoY", videoY)
                 .putFloat("videoW", videoW)

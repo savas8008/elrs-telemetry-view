@@ -12,11 +12,10 @@ import android.os.Build;
 import android.os.IBinder;
 
 /**
- * Foreground service that keeps the app process running while another app (e.g. DJI Fly) is
- * in front. Without it Android pauses/freezes the app in the background: the RTMP receiver stops
- * reading, DJI Fly's send buffer fills up and DJI Fly drops the stream; telemetry, alarms and
- * logging would stop too. The receivers themselves live in MainActivity; this service only keeps
- * the process in the foreground and shows the required notification.
+ * Foreground service that keeps the app process running while the screen is off or another app
+ * is in front. Without it Android pauses/freezes the app in the background and telemetry, spoken
+ * alarms, logging and the goggles video would stop. The receivers themselves live in MainActivity;
+ * this service only keeps the process in the foreground and shows the required notification.
  */
 public class TelemetryService extends Service {
 
@@ -42,7 +41,7 @@ public class TelemetryService extends Service {
         if (nm != null && nm.getNotificationChannel(CHANNEL) == null) {
             NotificationChannel ch = new NotificationChannel(CHANNEL, "Ground station running",
                     NotificationManager.IMPORTANCE_LOW);
-            ch.setDescription("Shown while telemetry, alarms, logging and the video receiver run in the background");
+            ch.setDescription("Shown while telemetry, alarms, logging and the goggles video run in the background");
             nm.createNotificationChannel(ch);
         }
         Intent open = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);

@@ -16,11 +16,6 @@
         android:name="android.hardware.usb.accessory"
         android:required="false" />
 
-    <!-- needed on Android 11+ to find and open DJI Fly -->
-    <queries>
-        <package android:name="dji.go.v5" />
-    </queries>
-
     <application
         android:label="@string/app_name"
         android:theme="@android:style/Theme.Material.NoActionBar"
@@ -44,8 +39,8 @@
                 android:resource="@xml/accessory_filter" />
         </activity>
 
-        <!-- keeps the app alive while DJI Fly is in front; connectedDevice: local network devices
-             (allowed because CHANGE_NETWORK_STATE / CHANGE_WIFI_MULTICAST_STATE are declared) -->
+        <!-- keeps telemetry, alarms, logging and goggles video running in the background;
+             connectedDevice is allowed because CHANGE_NETWORK_STATE / CHANGE_WIFI_MULTICAST_STATE are declared -->
         <service
             android:name=".TelemetryService"
             android:exported="false"

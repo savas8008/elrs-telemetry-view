@@ -36,17 +36,17 @@ public class SettingsDialog {
         GcsMap map();
 
         /** Called after settings were saved. */
-        void onSettingsSaved(int oldPort, boolean oldVideoEnabled, int oldVideoPort);
+        void onSettingsSaved(int oldPort);
 
         void showRawData();
 
         /** Discards unsaved changes by reloading the stored settings. */
         void reloadSettings();
 
-        /** Goggles N3 USB connection status. */
+        /** Goggles USB connection status. */
         String usbStatus();
 
-        /** Reopens the Goggles N3 USB connection. */
+        /** Connects (or reconnects) the goggles over USB. */
         void usbReconnect();
 
         /** Starts an offline download of the visible map area. Returns an error message or null. */
@@ -303,34 +303,20 @@ public class SettingsDialog {
     }
 
     private void buildVideo(LinearLayout col) {
-        LinearLayout usbCard = card(col, "GOGGLES N3 OVER USB (NO DJI FLY)");
-        Switch usbOn = sw(usbCard, "Receive video directly from DJI Goggles N3", s.usbGoggles);
-        hint(usbCard, "Connect the N3 to this device with a USB-C data cable while it is linked to the aircraft. "
-                + "When Android asks which app to open for the DJI accessory, choose ELRS Telemetry. "
-                + "Unofficial: based on the open-source DJI Unchained VOC project; tested by others with "
-                + "N3 + O4 Air Unit Pro / Avata 2, and may stop working after DJI firmware updates.");
+        LinearLayout card = card(col, "GOGGLES VIDEO (USB)");
+        hint(card, "Connect DJI Goggles N3 to this device with a USB-C data cable while the goggles are linked to "
+                + "the aircraft. When Android asks which app to open for the DJI accessory, choose ELRS Telemetry. "
+                + "Unofficial: based on the open-source DJI Unchained VOC project; may stop working after DJI "
+                + "firmware updates.");
         TextView usbState = label("Status: " + host.usbStatus());
         usbState.setTextColor(C_LABEL);
         usbState.setTextSize(12);
         usbState.setSingleLine(false);
-        usbCard.addView(usbState);
-        usbCard.addView(button("Reconnect USB", false, v -> {
+        card.addView(usbState);
+        card.addView(button("Connect", true, v -> {
             host.usbReconnect();
             usbState.setText("Status: " + host.usbStatus());
         }));
-        savers.add(() -> s.usbGoggles = usbOn.isChecked());
-
-        LinearLayout card = card(col, "VIDEO STREAM FROM DJI FLY (RTMP)");
-        Switch en = sw(card, "Receive video stream (RTMP)", s.videoEnabled);
-        Switch keep = sw(card, "Keep running in the background", s.keepRunning);
-        hint(card, "Keeps the video receiver, telemetry, alarms and logging running while DJI Fly or another app is "
-                + "in front (shows a notification). If this is off, DJI Fly's stream stops when you switch apps.");
-        LinearLayout row = new LinearLayout(ctx);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.addView(label("RTMP port"), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        EditText port = number(String.valueOf(s.videoPort), false, false);
-        row.addView(port, new LinearLayout.LayoutParams(dp(90), LinearLayout.LayoutParams.WRAP_CONTENT));
-        card.addView(row);
 
         card.addView(label("Display"));
         RadioGroup mode = radio(card, new String[]{
@@ -355,29 +341,15 @@ public class SettingsDialog {
         }
         card.addView(sizes);
         card.addView(presetInfo);
+
+        Switch keep = sw(card, "Keep running in the background", s.keepRunning);
+        hint(card, "Keeps video, telemetry, spoken alarms and logging running while the screen is off or another "
+                + "app is in front (shows a notification; use Exit there to close the app).");
         savers.add(() -> {
             s.keepRunning = keep.isChecked();
             s.videoMode = checkedIndex(mode, s.videoMode);
             if (s.videoMode != Settings.VIDEO_OFF) s.videoShownMode = s.videoMode;
             if (preset[0] >= 0) applyPreset(preset[0]);
-        });
-
-        hint(card, "In DJI Fly (goggles connected over USB): Live streaming › RTMP, then enter one of these URLs. "
-                + "The device running DJI Fly must be on the same network as this device:");
-        StringBuilder urls = new StringBuilder();
-        for (String u : VideoPanel.streamUrls(s.videoPort)) urls.append(u).append('\n');
-        TextView t = label(urls.toString().trim());
-        t.setSingleLine(false);
-        t.setTypeface(Typeface.MONOSPACE);
-        t.setTextSize(12);
-        t.setTextIsSelectable(true);
-        card.addView(t);
-        hint(card, "Tip: turn on this device's hotspot and connect both the backpack (as its home network) and the "
-                + "phone running DJI Fly to it. See the README for the possible setups.");
-        savers.add(() -> {
-            s.videoEnabled = en.isChecked();
-            int p = (int) parse(port, s.videoPort, "RTMP port");
-            if (p >= 1024 && p <= 65535) s.videoPort = p;
         });
     }
 
@@ -401,10 +373,8 @@ public class SettingsDialog {
 
     private void save() {
         int oldPort = s.port;
-        boolean oldVideo = s.videoEnabled;
-        int oldVideoPort = s.videoPort;
         for (Runnable r : savers) r.run();
-        host.onSettingsSaved(oldPort, oldVideo, oldVideoPort);
+        host.onSettingsSaved(oldPort);
         dialog.dismiss();
         Toast.makeText(ctx, "Settings saved", Toast.LENGTH_SHORT).show();
     }

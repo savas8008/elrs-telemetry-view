@@ -146,6 +146,12 @@ public final class N3UsbLink {
         return identity;
     }
 
+    /** True if a DJI USB accessory (the goggles) is currently attached. */
+    public boolean accessoryPresent() {
+        UsbAccessory a = firstDjiAccessory();
+        return a != null && isDji(a);
+    }
+
     public boolean isStreaming() {
         return streaming;
     }

@@ -11,54 +11,50 @@ import android.media.MediaFormat;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.Surface;
 import android.view.TextureView;
+import android.view.View;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import java.net.Inet4Address;
-import java.net.InetAddress;
-import java.net.NetworkInterface;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
 import java.util.Locale;
 
 /**
- * Shows the RTMP video stream: decodes H.264/H.265 with MediaCodec (low-latency mode where
- * supported) onto a TextureView, letterboxed to keep the aspect ratio.
+ * Goggles video: decodes H.264 with MediaCodec (low-latency mode where supported) onto a
+ * TextureView, letterboxed. While no video arrives it shows what to do and a Connect button.
  */
-public final class VideoPanel extends FrameLayout implements RtmpServer.Listener, TextureView.SurfaceTextureListener {
+public final class VideoPanel extends FrameLayout implements TextureView.SurfaceTextureListener {
+
+    public static final String MIME_AVC = "video/avc";
 
     public interface Callback {
-        void onStreamStarted(String remote);
-
-        void onStreamStopped();
+        /** The user pressed Connect. */
+        void onConnectClicked();
     }
 
     private final TextureView texture;
-    private final TextView status;
+    private final LinearLayout overlay;
+    private final TextView message, detail, connect;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final Object lock = new Object();
     private Callback callback;
 
     private Surface surface;
     private volatile MediaCodec codec;
-    private String mime;
-    private byte[] csd0, csd1;
+    private byte[] sps, pps;
     private boolean waitForKey = true;
     private volatile int videoW, videoH;
     private volatile long lastFrameTime;   // last frame rendered by the decoder
-    private volatile long lastDataTime;    // last video data received from the publisher
+    private volatile long lastDataTime;    // last video data received from the goggles
     private volatile boolean hadVideo;     // video arrived on the current connection
-    private volatile long frameCount;
     private volatile boolean connected;
-    private volatile String remote = "";
-    private String idleText = "";
     private volatile String lastEnd = "";
+    private String linkStatus = "";
 
     public VideoPanel(Context c) {
         super(c);
@@ -69,64 +65,88 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
         texture = new TextureView(c);
         texture.setSurfaceTextureListener(this);
         addView(texture, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
-        status = new TextView(c);
-        status.setTextColor(Color.rgb(200, 205, 215));
-        status.setTextSize(12);
-        status.setGravity(Gravity.CENTER);
-        status.setTypeface(Typeface.DEFAULT_BOLD);
-        status.setPadding(16, 16, 16, 16);
-        addView(status, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+
+        overlay = new LinearLayout(c);
+        overlay.setOrientation(LinearLayout.VERTICAL);
+        overlay.setGravity(Gravity.CENTER);
+        overlay.setBackgroundColor(Color.BLACK);  // opaque: never leave a frozen last frame visible
+        overlay.setPadding(dp(12), dp(8), dp(12), dp(8));
+        TextView icon = new TextView(c);
+        icon.setText("📷");
+        icon.setTextSize(26);
+        icon.setGravity(Gravity.CENTER);
+        overlay.addView(icon);
+        message = new TextView(c);
+        message.setTextColor(Color.rgb(225, 230, 238));
+        message.setTextSize(13);
+        message.setTypeface(Typeface.DEFAULT_BOLD);
+        message.setGravity(Gravity.CENTER);
+        overlay.addView(message);
+        detail = new TextView(c);
+        detail.setTextColor(Color.rgb(140, 150, 165));
+        detail.setTextSize(11);
+        detail.setGravity(Gravity.CENTER);
+        detail.setPadding(0, dp(2), 0, dp(6));
+        overlay.addView(detail);
+        connect = new TextView(c);
+        connect.setText("Connect");
+        connect.setTextColor(Color.WHITE);
+        connect.setTextSize(14);
+        connect.setTypeface(Typeface.DEFAULT_BOLD);
+        connect.setGravity(Gravity.CENTER);
+        connect.setPadding(dp(18), dp(8), dp(18), dp(8));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.rgb(0, 130, 190));
+        bg.setCornerRadius(dp(8));
+        connect.setBackground(bg);
+        connect.setOnClickListener(v -> {
+            if (callback != null) callback.onConnectClicked();
+        });
+        overlay.addView(connect, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        addView(overlay, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+    }
+
+    private int dp(float v) {
+        return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, getResources().getDisplayMetrics()));
     }
 
     public void setCallback(Callback cb) {
         callback = cb;
     }
 
-    /** Text shown while no video is arriving (e.g. the stream URL). */
-    public void setIdleText(String t) {
-        idleText = t;
+    /** USB link status shown while no video arrives. */
+    public void setLinkStatus(String s) {
+        linkStatus = s;
     }
 
-    /** Updates the status overlay; call periodically from the UI thread. */
+    /** Updates the overlay; call periodically from the UI thread. */
     public void refresh(long now) {
-        boolean live = now - lastFrameTime < 2000;
-        if (live) {
-            status.setText("");
-            status.setBackgroundColor(Color.TRANSPARENT);
+        if (now - lastFrameTime < 2000) {
+            overlay.setVisibility(View.GONE);
             return;
         }
-        String t;
-        if (connected && hadVideo && isUsbSource()) {
-            t = "No video from the goggles for " + ((now - lastDataTime) / 1000) + " s\n"
-                    + "check the goggles' link to the aircraft — recovering automatically";
-        } else if (connected && hadVideo) {
-            // DJI Fly keeps the connection open but stopped sending (e.g. it went to the background)
-            t = "No video for " + ((now - lastDataTime) / 1000) + " s — DJI Fly stopped sending.\n"
-                    + "DJI Fly pauses live streaming while it is not visible:\n"
-                    + "keep it on screen (split screen / pop-up window) or run it on a second device.";
+        overlay.setVisibility(View.VISIBLE);
+        if (connected && hadVideo) {
+            message.setText("No video from the goggles for " + ((now - lastDataTime) / 1000) + " s");
+            detail.setText("Check the goggles' link to the aircraft — recovering automatically");
+            connect.setVisibility(View.GONE);
         } else if (connected) {
-            t = "Stream connected from " + remote + "\nwaiting for video…";
+            message.setText("Goggles connected — waiting for video");
+            detail.setText("The goggles must be linked to the aircraft");
+            connect.setVisibility(View.GONE);
         } else {
-            t = idleText;
-            if (!lastEnd.isEmpty()) t += "\n" + lastEnd;
+            message.setText("Connect DJI Goggles N3 to this device with a USB-C cable");
+            String d = linkStatus.isEmpty() ? "" : "Status: " + linkStatus;
+            if (!lastEnd.isEmpty()) d += (d.isEmpty() ? "" : "\n") + lastEnd;
+            detail.setText(d);
+            connect.setVisibility(View.VISIBLE);
         }
-        status.setText(t);
-        // Opaque: never leave the last decoded frame visible, it would look like live video
-        status.setBackgroundColor(Color.BLACK);
     }
 
-    /** True when the current stream comes from the goggles over USB (not RTMP). */
-    public boolean isUsbSource() {
-        return remote.startsWith("Goggles");
-    }
-
-    /** True while connected but the publisher has stopped sending video. */
+    /** True while connected but the goggles stopped sending video. */
     public boolean isStalled() {
         return connected && hadVideo && System.currentTimeMillis() - lastDataTime > 3000;
-    }
-
-    public boolean isConnected() {
-        return connected;
     }
 
     public boolean isLive() {
@@ -134,41 +154,30 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
     }
 
     public String describe() {
-        if (!isLive()) return connected ? "connected, no video" : "no stream";
-        return String.format(Locale.US, "%s %dx%d", codecName(mime), videoW, videoH);
+        return isLive() ? String.format(Locale.US, "H.264 %dx%d", videoW, videoH) : connected ? "connected, no video" : "not connected";
     }
 
-    private static String codecName(String m) {
-        return RtmpServer.MIME_HEVC.equals(m) ? "H.265" : "H.264";
-    }
+    // ---------------------------------------------------------------- Video input (USB read thread)
 
-    // ---------------------------------------------------------------- RtmpServer.Listener (network thread)
-
-    @Override
-    public void onPublish(String app, String streamKey, String remoteAddr) {
+    public void onConnected() {
         connected = true;
         hadVideo = false;
-        remote = remoteAddr.replace("/", "");
         synchronized (lock) {
             waitForKey = true;
         }
-        ui.post(() -> {
-            if (callback != null) callback.onStreamStarted(remote);
-        });
     }
 
-    @Override
-    public void onVideoConfig(String m, byte[] c0, byte[] c1) {
+    /** SPS/PPS with 4-byte start codes. */
+    public void onVideoConfig(byte[] newSps, byte[] newPps) {
         synchronized (lock) {
-            boolean same = m.equals(mime) && Arrays.equals(c0, csd0) && Arrays.equals(c1, csd1) && codec != null;
-            mime = m;
-            csd0 = c0;
-            csd1 = c1;
+            boolean same = Arrays.equals(newSps, sps) && Arrays.equals(newPps, pps) && codec != null;
+            sps = newSps;
+            pps = newPps;
             if (!same) restartDecoder();
         }
     }
 
-    @Override
+    /** One access unit in Annex-B format. */
     public void onVideoFrame(byte[] annexB, long ptsMs, boolean keyFrame) {
         long now = System.currentTimeMillis();
         boolean gap = hadVideo && now - lastDataTime > 1000;
@@ -199,15 +208,11 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
         }
     }
 
-    @Override
-    public void onDisconnect(String reason) {
+    public void onDisconnected(String reason) {
         connected = false;
         hadVideo = false;
-        lastEnd = "Last stream ended " + new java.text.SimpleDateFormat("HH:mm:ss", Locale.US).format(new java.util.Date())
+        lastEnd = "Last video ended " + new java.text.SimpleDateFormat("HH:mm:ss", Locale.US).format(new java.util.Date())
                 + " (" + reason + ")";
-        ui.post(() -> {
-            if (callback != null) callback.onStreamStopped();
-        });
     }
 
     // ---------------------------------------------------------------- Decoder
@@ -215,12 +220,12 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
     /** Must hold {@link #lock}. */
     private void restartDecoder() {
         releaseDecoder();
-        if (surface == null || mime == null || csd0 == null) return;
+        if (surface == null || sps == null || pps == null) return;
         try {
-            MediaCodec c = MediaCodec.createDecoderByType(mime);
-            MediaFormat f = MediaFormat.createVideoFormat(mime, 1920, 1080);
-            f.setByteBuffer("csd-0", ByteBuffer.wrap(csd0));
-            if (csd1 != null) f.setByteBuffer("csd-1", ByteBuffer.wrap(csd1));
+            MediaCodec c = MediaCodec.createDecoderByType(MIME_AVC);
+            MediaFormat f = MediaFormat.createVideoFormat(MIME_AVC, 1920, 1080);
+            f.setByteBuffer("csd-0", ByteBuffer.wrap(sps));
+            f.setByteBuffer("csd-1", ByteBuffer.wrap(pps));
             boolean lowLatency = Build.VERSION.SDK_INT >= 30;
             if (lowLatency) f.setInteger(MediaFormat.KEY_LOW_LATENCY, 1);
             try {
@@ -238,7 +243,8 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
             t.start();
         } catch (Exception e) {
             codec = null;
-            ui.post(() -> status.setText("Video decoder error: " + e.getMessage()));
+            String msg = e.getMessage();
+            ui.post(() -> detail.setText("Video decoder error: " + msg));
         }
     }
 
@@ -263,7 +269,6 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
                 if (idx >= 0) {
                     c.releaseOutputBuffer(idx, true);  // render immediately
                     lastFrameTime = System.currentTimeMillis();
-                    frameCount++;
                 } else if (idx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                     MediaFormat f = c.getOutputFormat();
                     int w = f.getInteger(MediaFormat.KEY_WIDTH);
@@ -330,25 +335,5 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
         synchronized (lock) {
             releaseDecoder();
         }
-    }
-
-    // ---------------------------------------------------------------- Stream URLs
-
-    /** RTMP URLs this device can be reached at, one per IPv4 interface, plus localhost. */
-    public static List<String> streamUrls(int port) {
-        List<String> r = new ArrayList<>();
-        try {
-            for (NetworkInterface ni : Collections.list(NetworkInterface.getNetworkInterfaces())) {
-                if (!ni.isUp() || ni.isLoopback()) continue;
-                for (InetAddress a : Collections.list(ni.getInetAddresses())) {
-                    if (a instanceof Inet4Address) {
-                        r.add("rtmp://" + a.getHostAddress() + ":" + port + "/live/dji   (" + ni.getName() + ")");
-                    }
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        r.add("rtmp://127.0.0.1:" + port + "/live/dji   (DJI Fly on this device)");
-        return r;
     }
 }
