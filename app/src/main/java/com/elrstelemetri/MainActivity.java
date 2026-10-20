@@ -70,6 +70,8 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
     private volatile DatagramSocket socket;
     private Thread rxThread;
     private WifiManager.MulticastLock mcLock;
+    private WifiManager.WifiLock wifiLock;
+    private volatile int dataGaps;  // telemetry pauses > STALE_MS after data had arrived
     private SharedPreferences prefs;
 
     private GcsMap map;
@@ -284,6 +286,11 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         mcLock = wm.createMulticastLock("elrs-telemetry");
         mcLock.setReferenceCounted(false);
         mcLock.acquire();  // some phones drop broadcast packets without this lock
+        // keeps the WiFi radio out of power saving (screen off / background), which delays or drops packets
+        wifiLock = wm.createWifiLock(Build.VERSION.SDK_INT >= 29 ? WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+                : WifiManager.WIFI_MODE_FULL_HIGH_PERF, "elrs-telemetry");
+        wifiLock.setReferenceCounted(false);
+        wifiLock.acquire();
         router.start();
         startReceiver();
         n3.start(launchIntent);
@@ -301,6 +308,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         router.stop();
         logger.close();
         if (mcLock != null && mcLock.isHeld()) mcLock.release();
+        if (wifiLock != null && wifiLock.isHeld()) wifiLock.release();
     }
 
     // ================================================================ UDP
@@ -331,8 +339,10 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
                     int n = pk.getLength();
                     int frames = parser.feed(buf, n);
                     synchronized (state) {
+                        long t = System.currentTimeMillis();
+                        if (state.lastDatagramTime != 0 && t - state.lastDatagramTime > STALE_MS) dataGaps++;
                         state.datagramCount++;
-                        state.lastDatagramTime = System.currentTimeMillis();
+                        state.lastDatagramTime = t;
                         state.lastSource = pk.getAddress().getHostAddress();
                         if (frames > 0) state.mavlinkSuspect = false;
                         else if (n > 0 && (buf[0] == (byte) 0xFD || buf[0] == (byte) 0xFE)) state.mavlinkSuspect = true;
@@ -556,6 +566,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
             String link;
             if (s.lastDatagramTime == 0) link = netStatus + " · no data · " + router.describe();
             else link = String.format(Locale.US, "%s · %.0f p/s · %s", s.lastSource, rate, router.describe());
+            link += connectionHealth(false);
             tLink.setText(link);
             tLink.setTextColor(fresh(s.lastDatagramTime, now) ? C_LABEL : C_BAD);
 
@@ -644,7 +655,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
                 else if (state.mavlinkSuspect) detail = "Receiving MAVLink — set Link Mode = Normal on the radio";
                 else detail = "Packets arrive but contain no CRSF telemetry — check Link Mode = Normal";
             }
-            waitDetail.setText(detail);
+            waitDetail.setText(detail + connectionHealth(true));
         }
         setWaiting(waiting);
         if (waiting || planning) return;
@@ -657,6 +668,17 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
             ((GradientDrawable) tWarn.getBackground()).setColor(
                     !alarmLines.isEmpty() ? Color.argb(225, 200, 30, 30) : Color.argb(210, 40, 45, 55));
         }
+    }
+
+    /** WiFi drops and telemetry pauses since start, to tell a WiFi problem from a telemetry problem. */
+    private String connectionHealth(boolean full) {
+        int drops = router.wifiDrops(), gaps = dataGaps;
+        if (drops == 0 && gaps == 0) return "";
+        if (!full) return " · drops " + drops + "/" + gaps;
+        String s = "\nWiFi drops: " + drops + " · telemetry pauses: " + gaps;
+        long t = router.lastDropTime();
+        if (t != 0) s += " (last drop " + new java.text.SimpleDateFormat("HH:mm:ss", Locale.US).format(new java.util.Date(t)) + ")";
+        return s;
     }
 
     private void writeLogRow() {

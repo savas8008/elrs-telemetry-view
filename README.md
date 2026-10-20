@@ -104,7 +104,8 @@ network streaming.
 Controls:
 - The video is **closed when the app starts**. The **goggles** button in the bottom bar opens/closes it
   (blue = open) and reopens it the way it was last shown (panel or full screen).
-- On the floating panel (top-right): **fullscreen** = replace the map, **✕** = close; **◢** = resize, drag anywhere else to move.
+- On the floating panel: **pinch with two fingers** to resize (the aspect ratio is kept), drag with one finger
+  to move, or drag the **◢** corner to resize freely. Top-right: **fullscreen** = replace the map, **✕** = close.
 - While the video replaces the map (bottom-left): **picture-in-picture** = back to the floating panel, **✕** = close.
 
 Telemetry still comes from the backpack WiFi, so one device does everything: WiFi for telemetry,
@@ -205,11 +206,32 @@ permission needed). Open them with a file manager or import them into a spreadsh
 |---|---|
 | Backpack WiFi network does not appear | Backpack firmware must be 1.5.8+ (see the note at the top). Set Telemetry Off → WiFi and wait a few seconds. |
 | "Waiting for telemetry" | Is the device connected to the backpack WiFi? Android may have dropped it ("stay connected"). |
+| WiFi keeps disconnecting and reconnecting | See [WiFi keeps dropping](#wifi-keeps-dropping) below. |
 | "Receiving MAVLink" | Set Link Mode to **Normal** on the radio. |
 | Map is empty/grey | The area was not downloaded. Download it before connecting to the backpack WiFi. |
 | No position | Is GPS enabled on the aircraft with GPS telemetry, with enough satellites? |
 | No voice | Install/enable an English voice in Android's text-to-speech settings. |
 | No goggles video | Goggles linked to the aircraft? Data cable (not charge-only)? Choose ELRS Telemetry when Android asks; check ⚙ Settings → Goggles video → Status, then **Connect**. Close DJI Fly so it does not hold the USB connection. |
+
+### WiFi keeps dropping
+
+The backpack has no internet and answers Android's internet check with a redirect to its own web
+page, so Android treats it as a "sign-in" (captive portal) network without internet. Some phones then
+leave it or switch to mobile data / another saved WiFi. The app already asks Android to keep the
+network, keeps the WiFi radio out of power saving and re-binds automatically after a drop. On the phone:
+
+1. When connecting, choose **Stay connected / Keep WiFi connection** ("Yes, don't ask again") on the
+   *no internet* prompt. If a **Sign in to network** notification appears, open it and pick
+   **Use this network as is**.
+2. Turn off automatic switching for poor WiFi: *Switch to mobile data automatically* / *Adaptive Wi-Fi* /
+   *Intelligent Wi-Fi* (Samsung: Settings › Connections › Wi-Fi › ⋮ › Intelligent Wi-Fi;
+   Xiaomi: *Wi-Fi assistant*). Names differ by brand.
+3. Forget (or turn off auto-connect for) other saved WiFi networks in range of the flying field.
+4. Exclude the app from battery optimisation (Android Settings › Apps › ELRS Telemetry › Battery › Unrestricted).
+
+The top bar shows `drops N/M` once something happens: **N** = times the WiFi itself was lost,
+**M** = telemetry pauses longer than 3 s. Pauses without WiFi drops point to the radio/backpack side
+(range, telemetry ratio, backpack), not the phone.
 
 ## Technical details (verified against the source code)
 

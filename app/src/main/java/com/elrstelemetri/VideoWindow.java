@@ -7,13 +7,15 @@ import android.graphics.drawable.GradientDrawable;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
 /**
- * Floating container for the video: drag the window to move it, drag the ◢ corner to resize it.
+ * Floating container for the video: drag the window to move it; resize it with two fingers (pinch)
+ * or by dragging the ◢ corner.
  * Buttons on the window: fullscreen/picture-in-picture switches between the panel and "replace the map", ✕ hides the video.
  * Stays inside its parent.
  */
@@ -42,6 +44,11 @@ public final class VideoWindow extends FrameLayout {
     private float downX, downY;
     private int startL, startT, startW, startH;
     private boolean dragging;
+    private boolean resizing;   // corner handle drag in progress
+    private boolean pinching;   // two-finger resize in progress
+    private final ScaleGestureDetector pinch;
+    private float pinchScale;
+    private float pinchFocusX, pinchFocusY;  // focus point, relative to the window at the start
 
     @SuppressLint("ClickableViewAccessibility")
     public VideoWindow(Context c, VideoPanel video) {
@@ -59,9 +66,32 @@ public final class VideoWindow extends FrameLayout {
         hb.setColor(Color.argb(150, 0, 0, 0));
         hb.setCornerRadius(dp(6));
         handle.setBackground(hb);
-        LayoutParams hl = new LayoutParams(dp(34), dp(34), Gravity.BOTTOM | Gravity.END);
+        LayoutParams hl = new LayoutParams(dp(40), dp(40), Gravity.BOTTOM | Gravity.END);
         addView(handle, hl);
         handle.setOnTouchListener(this::onResizeTouch);
+
+        pinch = new ScaleGestureDetector(c, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            @Override
+            public boolean onScaleBegin(ScaleGestureDetector d) {
+                if (!floating) return false;
+                beginGesture(null);
+                pinching = true;
+                dragging = false;
+                pinchScale = 1f;
+                pinchFocusX = d.getFocusX() - getLeft();
+                pinchFocusY = d.getFocusY() - getTop();
+                getParent().requestDisallowInterceptTouchEvent(true);
+                return true;
+            }
+
+            @Override
+            public boolean onScale(ScaleGestureDetector d) {
+                pinchScale *= d.getScaleFactor();
+                applyPinch();
+                return true;
+            }
+        });
+        pinch.setQuickScaleEnabled(false);
 
         controls = new android.widget.LinearLayout(c);
         controls.setOrientation(android.widget.LinearLayout.HORIZONTAL);
@@ -162,8 +192,10 @@ public final class VideoWindow extends FrameLayout {
             case MotionEvent.ACTION_DOWN:
                 beginGesture(e);
                 return false;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                return floating && !resizing;  // second finger: pinch to resize
             case MotionEvent.ACTION_MOVE:
-                return floating && moved(e);
+                return floating && !resizing && moved(e);
             default:
                 return false;
         }
@@ -172,11 +204,19 @@ public final class VideoWindow extends FrameLayout {
     @SuppressLint("ClickableViewAccessibility")
     @Override
     public boolean onTouchEvent(MotionEvent e) {
+        // the detector needs raw (screen) coordinates because the window moves while pinching
+        MotionEvent raw = MotionEvent.obtain(e);
+        raw.offsetLocation(getLeft(), getTop());
+        pinch.onTouchEvent(raw);
+        raw.recycle();
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 beginGesture(e);
                 return true;
+            case MotionEvent.ACTION_POINTER_UP:
+                return true;
             case MotionEvent.ACTION_MOVE:
+                if (pinching || e.getPointerCount() > 1) return true;
                 if (floating && (dragging || moved(e))) {
                     dragging = true;
                     getParent().requestDisallowInterceptTouchEvent(true);
@@ -185,20 +225,37 @@ public final class VideoWindow extends FrameLayout {
                 }
                 return true;
             case MotionEvent.ACTION_UP:
-                if (dragging && listener != null) listener.onGeometryChanged();
+                if ((dragging || pinching) && listener != null) listener.onGeometryChanged();
                 dragging = false;
+                pinching = false;
                 return true;
             case MotionEvent.ACTION_CANCEL:
                 dragging = false;
+                pinching = false;
                 return true;
             default:
                 return true;
         }
     }
 
+    /** Scales the window around the pinch focus, keeping its aspect ratio and staying inside the parent. */
+    private void applyPinch() {
+        int pw = parentW(), ph = parentH();
+        if (startW <= 0 || startH <= 0) return;
+        float s = pinchScale;
+        s = Math.max(s, Math.max(minW / (float) startW, minH / (float) startH));
+        if (pw > 0 && ph > 0) s = Math.min(s, Math.min(pw / (float) startW, ph / (float) startH));
+        int w = Math.round(startW * s), h = Math.round(startH * s);
+        int left = Math.round(startL + pinchFocusX - pinchFocusX * s);
+        int top = Math.round(startT + pinchFocusY - pinchFocusY * s);
+        setGeometry(left, top, w, h);
+    }
+
     private void beginGesture(MotionEvent e) {
-        downX = e.getRawX();
-        downY = e.getRawY();
+        if (e != null) {
+            downX = e.getRawX();
+            downY = e.getRawY();
+        }
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) getLayoutParams();
         startL = lp.leftMargin;
         startT = lp.topMargin;
@@ -217,7 +274,9 @@ public final class VideoWindow extends FrameLayout {
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 beginGesture(e);
-                getParent().requestDisallowInterceptTouchEvent(true);
+                resizing = true;
+                // v's parent is this window: stops both this window (move) and the map from taking the gesture
+                v.getParent().requestDisallowInterceptTouchEvent(true);
                 return true;
             case MotionEvent.ACTION_MOVE:
                 setGeometry(startL, startT, startW + Math.round(e.getRawX() - downX),
@@ -225,6 +284,7 @@ public final class VideoWindow extends FrameLayout {
                 return true;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
+                resizing = false;
                 if (listener != null) listener.onGeometryChanged();
                 return true;
             default:

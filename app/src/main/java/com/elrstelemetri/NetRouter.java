@@ -16,6 +16,12 @@ import java.util.Objects;
  * traffic (map tiles) is routed over mobile data when it is available, and the telemetry UDP
  * socket is bound to WiFi. If there is no mobile data the map runs from the offline tile cache.
  * Nothing is rerouted when the WiFi itself has internet (e.g. testing at home).
+ *
+ * The backpack answers Android's internet check with a redirect to its web page, so Android sees a
+ * WiFi without internet (captive portal). Some phones then drop such a network or switch away from
+ * it. To keep it, the app holds a request for the WiFi network (a network an app is using is not
+ * torn down by the system) and reports every drop, so the UDP socket can be re-bound to the new
+ * network: a socket bound to a lost network would never receive again.
  */
 public final class NetRouter {
 
@@ -28,7 +34,10 @@ public final class NetRouter {
     private volatile Network cellular;
     private Network bound;
     private boolean started;
+    private volatile int wifiDrops;
+    private volatile long lastDropTime;
 
+    /** @param onRouteChanged called on the main thread when the map route or the WiFi network changes */
     public NetRouter(Context c, Runnable onRouteChanged) {
         cm = (ConnectivityManager) c.getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
         this.onRouteChanged = onRouteChanged;
@@ -37,9 +46,10 @@ public final class NetRouter {
     private final ConnectivityManager.NetworkCallback wifiCb = new ConnectivityManager.NetworkCallback() {
         @Override
         public void onCapabilitiesChanged(Network n, NetworkCapabilities nc) {
+            boolean changed = !n.equals(wifi);
             wifi = n;
             wifiValidated = nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
-            evaluate();
+            evaluate(changed);
         }
 
         @Override
@@ -47,7 +57,9 @@ public final class NetRouter {
             if (n.equals(wifi)) {
                 wifi = null;
                 wifiValidated = false;
-                evaluate();
+                wifiDrops++;
+                lastDropTime = System.currentTimeMillis();
+                evaluate(true);
             }
         }
     };
@@ -56,14 +68,14 @@ public final class NetRouter {
         @Override
         public void onAvailable(Network n) {
             cellular = n;
-            evaluate();
+            evaluate(false);
         }
 
         @Override
         public void onLost(Network n) {
             if (n.equals(cellular)) {
                 cellular = null;
-                evaluate();
+                evaluate(false);
             }
         }
     };
@@ -72,8 +84,10 @@ public final class NetRouter {
         if (started || cm == null) return;
         started = true;
         try {
-            cm.registerNetworkCallback(new NetworkRequest.Builder()
-                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(), wifiCb);
+            // a request (not just a listen) keeps the WiFi up although it has no internet
+            cm.requestNetwork(new NetworkRequest.Builder()
+                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                    .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), wifiCb);
             cm.requestNetwork(new NetworkRequest.Builder()
                     .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
                     .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), cellCb);
@@ -96,16 +110,26 @@ public final class NetRouter {
         });
     }
 
-    private void evaluate() {
+    private void evaluate(boolean wifiChanged) {
         main.post(() -> {
             Network w = wifi, c = cellular;
             Network target = (w != null && !wifiValidated && c != null) ? c : null;
-            if (!Objects.equals(target, bound)) {
+            boolean routeChanged = !Objects.equals(target, bound);
+            if (routeChanged) {
                 cm.bindProcessToNetwork(target);
                 bound = target;
-                if (onRouteChanged != null) onRouteChanged.run();
             }
+            if ((routeChanged || wifiChanged) && onRouteChanged != null) onRouteChanged.run();
         });
+    }
+
+    /** Number of times the WiFi was lost since the app started. */
+    public int wifiDrops() {
+        return wifiDrops;
+    }
+
+    public long lastDropTime() {
+        return lastDropTime;
     }
 
     /** Binds the telemetry socket to the WiFi network, if there is one. */
