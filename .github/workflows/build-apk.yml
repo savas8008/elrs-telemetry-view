@@ -71,6 +71,7 @@ jobs:
             $( [ -f app/build/screenshots/settings.png ] && echo "app/build/screenshots/settings.png#screenshot-settings.png" ) \
             $( [ -f app/build/screenshots/gcs-full.png ] && echo "app/build/screenshots/gcs-full.png#screenshot-video-full.png" ) \
             $( [ -f app/build/screenshots/waiting.png ] && echo "app/build/screenshots/waiting.png#screenshot-waiting.png" ) \
+            $( [ -f app/build/screenshots/offline.png ] && echo "app/build/screenshots/offline.png#screenshot-offline-map.png" ) \
             --title "ELRS Telemetry - build ${{ github.run_number }}" \
             --notes "Automatic build (${{ github.sha }}). Download the APK and install it on your phone or tablet." \
             --latest

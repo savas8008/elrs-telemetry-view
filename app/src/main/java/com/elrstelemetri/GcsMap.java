@@ -226,8 +226,15 @@ public class GcsMap {
         return (int) Math.floor(view.getZoomLevelDouble());
     }
 
-    public BoundingBox visibleArea() {
-        return view.getBoundingBox();
+    /** Lowest zoom included in offline downloads: an overview costs only a few tiles. */
+    public static final int OFFLINE_MIN_ZOOM = 8;
+
+    /** Map area covered by a rectangle given in map-view pixels. */
+    public BoundingBox areaForPixels(int left, int top, int right, int bottom) {
+        org.osmdroid.views.Projection p = view.getProjection();
+        org.osmdroid.api.IGeoPoint nw = p.fromPixels(left, top);
+        org.osmdroid.api.IGeoPoint se = p.fromPixels(right, bottom);
+        return new BoundingBox(nw.getLatitude(), se.getLongitude(), se.getLatitude(), nw.getLongitude());
     }
 
     private CacheManager cacheManager() throws Exception {
@@ -235,22 +242,20 @@ public class GcsMap {
         return downloader;
     }
 
-    /** Number of tiles needed for the visible area from the current zoom up to {@code maxZoom}. */
-    public int tilesForVisibleArea(int maxZoom) {
+    /** Number of tiles needed for {@code area} from {@link #OFFLINE_MIN_ZOOM} up to {@code maxZoom}. */
+    public int tilesForArea(BoundingBox area, int maxZoom) {
         try {
-            int from = Math.min(currentZoom(), maxZoom);
-            return cacheManager().possibleTilesInArea(visibleArea(), from, maxZoom);
+            return cacheManager().possibleTilesInArea(area, Math.min(OFFLINE_MIN_ZOOM, maxZoom), maxZoom);
         } catch (Exception e) {
             return -1;
         }
     }
 
-    /** Downloads the visible area for offline use. Returns an error message or null. */
-    public String downloadVisibleArea(int maxZoom, CacheManager.CacheManagerCallback cb) {
+    /** Downloads {@code area} for offline use. Returns an error message or null. */
+    public String downloadArea(BoundingBox area, int maxZoom, CacheManager.CacheManagerCallback cb) {
         try {
-            int from = Math.min(currentZoom(), maxZoom);
             downloader = new CacheManager(view);
-            downloader.downloadAreaAsyncNoUI(view.getContext(), visibleArea(), from, maxZoom, cb);
+            downloader.downloadAreaAsyncNoUI(view.getContext(), area, Math.min(OFFLINE_MIN_ZOOM, maxZoom), maxZoom, cb);
             return null;
         } catch (Exception e) {
             return e.getMessage() != null ? e.getMessage() : e.toString();

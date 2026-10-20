@@ -49,8 +49,8 @@ public class SettingsDialog {
         /** Connects (or reconnects) the goggles over USB. */
         void usbReconnect();
 
-        /** Starts an offline download of the visible map area. Returns an error message or null. */
-        String startOfflineDownload(int maxZoom);
+        /** Opens the offline map planner (choose an area on the map and download it). */
+        void openOfflineMapPlanner();
 
         /** Current offline download status, or empty. */
         String downloadStatus();
@@ -70,7 +70,6 @@ public class SettingsDialog {
     private final List<Runnable> savers = new ArrayList<>();
     private Dialog dialog;
     private TextView downloadInfo;
-    private int offlineZoom;
 
     public SettingsDialog(Context ctx, Host host) {
         this.ctx = ctx;
@@ -149,7 +148,8 @@ public class SettingsDialog {
         public void run() {
             if (downloadInfo != null) {
                 String st = host.downloadStatus();
-                downloadInfo.setText(st.isEmpty() ? estimateText() : st + "\n" + estimateText());
+                downloadInfo.setText(st);
+                downloadInfo.setVisibility(st.isEmpty() ? View.GONE : View.VISIBLE);
             }
             ui.postDelayed(this, 700);
         }
@@ -199,53 +199,25 @@ public class SettingsDialog {
         RadioGroup layers = radio(card, Settings.MAP_NAMES, s.mapType, false);
         savers.add(() -> s.mapType = checkedIndex(layers, s.mapType));
 
-        hint(card, "The backpack WiFi has no internet. Before flying, while you still have internet: pan and zoom "
-                + "the map to your flying field, then download it here. Downloaded tiles are used offline.");
-        TextView dl = label("Detail level (max zoom)");
-        card.addView(dl);
-        final int[] zooms = {15, 16, 17, 18};
-        int idx = 2;
-        for (int i = 0; i < zooms.length; i++) if (zooms[i] == s.offlineMaxZoom) idx = i;
-        offlineZoom = zooms[idx];
-        RadioGroup zg = radio(card, new String[]{"15", "16", "17", "18"}, idx, true);
-        zg.setOnCheckedChangeListener((g, id) -> offlineZoom = zooms[checkedIndex(zg, 2)]);
-        savers.add(() -> s.offlineMaxZoom = offlineZoom);
-
-        downloadInfo = label(estimateText());
+        hint(card, "The backpack WiFi has no internet. Before flying, while you still have internet (at home, "
+                + "no radio or goggles needed): open the offline map, find your flying field and download it. "
+                + "Downloaded tiles are used offline.");
+        downloadInfo = label("");
         downloadInfo.setSingleLine(false);
+        downloadInfo.setVisibility(View.GONE);
         card.addView(downloadInfo);
 
         LinearLayout btns = new LinearLayout(ctx);
         btns.setOrientation(LinearLayout.HORIZONTAL);
-        btns.addView(button("Download visible area", true, v -> {
-            int layer = checkedIndex(layers, s.mapType);
-            if (!GcsMap.supportsOffline(layer)) {
-                Toast.makeText(ctx, "OpenStreetMap does not allow bulk downloads. Choose Satellite, Topographic or Street.",
-                        Toast.LENGTH_LONG).show();
-                return;
-            }
-            if (layer != s.mapType) {
-                s.mapType = layer;
-                host.map().setMapType(layer);
-            }
-            String err = host.startOfflineDownload(offlineZoom);
-            if (err != null) Toast.makeText(ctx, err, Toast.LENGTH_LONG).show();
+        btns.addView(button("Choose area on map…", true, v -> {
+            save();
+            host.openOfflineMapPlanner();
         }));
         btns.addView(button("Cancel download", false, v -> host.map().cancelDownload()));
         card.addView(btns);
         long mb = GcsMap.cacheSizeBytes(ctx) / (1024 * 1024);
         hint(card, "Offline cache on this device: " + mb + " MB (up to 2 GB). To delete it: Android Settings › Apps › "
                 + "ELRS Telemetry › Storage › Clear storage.");
-    }
-
-    private String estimateText() {
-        int n = host.map().tilesForVisibleArea(offlineZoom);
-        if (n < 0) return "Visible area: tile count unavailable for this layer";
-        String size = String.format(Locale.US, "%.1f MB", n * (double) GcsMap.APPROX_TILE_KB / 1024);
-        String s1 = "Visible area, zoom " + Math.min(host.map().currentZoom(), offlineZoom) + "–" + offlineZoom
-                + ": " + n + " tiles ≈ " + size;
-        if (n > GcsMap.MAX_DOWNLOAD_TILES) s1 += "  (too large: zoom in or choose a lower detail level)";
-        return s1;
     }
 
     private void buildLogging(LinearLayout col) {

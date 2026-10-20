@@ -28,6 +28,7 @@ import com.elrstelemetri.n3.H264AnnexBAssembler;
 import com.elrstelemetri.n3.N3UsbLink;
 
 import org.osmdroid.tileprovider.cachemanager.CacheManager;
+import org.osmdroid.util.BoundingBox;
 
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -40,7 +41,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-public class MainActivity extends Activity implements SettingsDialog.Host {
+public class MainActivity extends Activity implements SettingsDialog.Host, OfflineMapPlanner.Host {
 
     private static final long STALE_MS = 3000;
     private static final long LOG_CLOSE_AFTER_MS = 30000;
@@ -103,6 +104,9 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     private LinearLayout waitCard;
     private TextView waitDetail;
     private boolean waitingShown;
+    // Offline map planner: full-screen area chooser over the map (usable without telemetry)
+    private OfflineMapPlanner planner;
+    private boolean planning;
     private TextView tMode, tArm, tTimer, tLq, tRssi, tSats, tRec, tLink, tWarn, tInfo;
     private TextView vAlt, vVario, vSpeed, vDist, vHomeDir, vGpsAlt;
     private TextView vCell, vCurr, vMah, vPower, vSnr, vTxPow, vDown, vRf;
@@ -391,7 +395,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     }
 
     private void applyVideoMode() {
-        boolean show = settings.videoMode != Settings.VIDEO_OFF && !waitingShown;
+        boolean show = settings.videoMode != Settings.VIDEO_OFF && gcsShown();
         boolean replace = show && settings.videoMode == Settings.VIDEO_REPLACE_MAP;
         videoWindow.setVisibility(show ? View.VISIBLE : View.GONE);
         map.view.setVisibility(replace ? View.INVISIBLE : View.VISIBLE);
@@ -638,7 +642,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             waitDetail.setText(detail);
         }
         setWaiting(waiting);
-        if (waiting) return;
+        if (waiting || planning) return;
 
         if (lines.isEmpty()) {
             tWarn.setVisibility(View.GONE);
@@ -744,17 +748,17 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     }
 
     @Override
-    public String startOfflineDownload(int maxZoom) {
+    public String startOfflineDownload(BoundingBox area, int maxZoom) {
         if (downloading) return "A download is already running";
         if (!router.hasInternet()) {
             return "No internet. The backpack WiFi has no internet: download offline maps before connecting "
                     + "to it, or enable mobile data.";
         }
-        int n = map.tilesForVisibleArea(maxZoom);
+        int n = map.tilesForArea(area, maxZoom);
         if (n > GcsMap.MAX_DOWNLOAD_TILES) {
             return "Area too large (" + n + " tiles). Zoom in or choose a lower detail level.";
         }
-        String err = map.downloadVisibleArea(maxZoom, new CacheManager.CacheManagerCallback() {
+        String err = map.downloadArea(area, maxZoom, new CacheManager.CacheManagerCallback() {
             private int total = n;
 
             @Override
@@ -798,6 +802,39 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     @Override
     public String downloadStatus() {
         return downloadStatus;
+    }
+
+    @Override
+    public boolean isDownloading() {
+        return downloading;
+    }
+
+    @Override
+    public boolean hasInternet() {
+        return router.hasInternet();
+    }
+
+    @Override
+    public void saveSettings() {
+        settings.save(prefs);
+    }
+
+    @Override
+    public void openOfflineMapPlanner() {
+        planning = true;
+        applyScreen();
+    }
+
+    @Override
+    public void closePlanner() {
+        planning = false;
+        applyScreen();
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (planning) closePlanner();
+        else super.onBackPressed();
     }
 
     // ================================================================ UI
@@ -1117,6 +1154,9 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         wButtons.setOrientation(LinearLayout.HORIZONTAL);
         wButtons.setGravity(Gravity.CENTER);
         wButtons.addView(cardButton("Open WiFi settings", true, v -> openWifiSettings()));
+        TextView wOffline = cardButton("Offline maps", false, v -> openOfflineMapPlanner());
+        leadingIcon(wOffline, R.drawable.ic_offline_map, 18);
+        wButtons.addView(wOffline);
         TextView wSettings = cardButton("Settings", false, v -> showSettings());
         leadingIcon(wSettings, R.drawable.ic_settings, 18);
         wButtons.addView(wSettings);
@@ -1125,6 +1165,11 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
                 FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
         wl.setMargins(dp(16), dp(16), dp(16), dp(16));
         root.addView(waitCard, wl);
+
+        planner = new OfflineMapPlanner(this, this);
+        planner.setVisibility(View.GONE);
+        root.addView(planner, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
         setWaiting(true);
 
         updateFollowButton();
@@ -1135,14 +1180,29 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
 
     /** Switches between the waiting screen (no telemetry yet) and the full GCS. */
     private void setWaiting(boolean waiting) {
-        if (waiting == waitingShown && waitCard.getVisibility() == (waiting ? View.VISIBLE : View.GONE)) return;
+        if (waiting == waitingShown && screenApplied) return;
         waitingShown = waiting;
-        int gcs = waiting ? View.GONE : View.VISIBLE;
+        applyScreen();
+    }
+
+    private boolean screenApplied;
+
+    /** True when the full GCS is on screen (not waiting, not planning offline maps). */
+    private boolean gcsShown() {
+        return !waitingShown && !planning;
+    }
+
+    /** Shows the GCS, the waiting screen or the offline map planner. */
+    private void applyScreen() {
+        screenApplied = true;
+        int gcs = gcsShown() ? View.VISIBLE : View.GONE;
         topBar.setVisibility(gcs);
         buttonBar.setVisibility(gcs);
-        if (waiting) tWarn.setVisibility(View.GONE);
-        dimView.setVisibility(waiting ? View.VISIBLE : View.GONE);
-        waitCard.setVisibility(waiting ? View.VISIBLE : View.GONE);
+        if (!gcsShown()) tWarn.setVisibility(View.GONE);
+        int wait = waitingShown && !planning ? View.VISIBLE : View.GONE;
+        dimView.setVisibility(wait);
+        waitCard.setVisibility(wait);
+        planner.setVisibility(planning ? View.VISIBLE : View.GONE);
         applyPanelVisibility();
         applyVideoMode();
     }
@@ -1173,7 +1233,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     }
 
     private void applyPanelVisibility() {
-        int v = settings.showPanels && !waitingShown ? View.VISIBLE : View.GONE;
+        int v = settings.showPanels && gcsShown() ? View.VISIBLE : View.GONE;
         leftPanel.setVisibility(v);
         rightPanel.setVisibility(v);
     }

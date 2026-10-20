@@ -148,6 +148,12 @@ ICONS = {
         (arc(12, 13.5, 3.6, 40, 140), WHITE, 1.7, None),
         (arc(12, 13.5, 7.0, 55, 125), WHITE, 1.7, None),
     ]),
+    # offline map: folded map with a download arrow
+    "ic_offline_map": (24, [
+        ("M2.8,6.2 L8.4,4 L15.6,6.2 L21.2,4 V17.8 L15.6,20 L8.4,17.8 L2.8,20 Z", WHITE, 1.8, None),
+        ("M8.4,4 V8 M15.6,6.2 V9 M8.4,16.2 V17.8 M15.6,18 V20", WHITE, 1.5, None),
+        ("M12,7.8 V15.2 M9.2,12.6 L12,15.4 L14.8,12.6", ACCENT, 2.1, None),
+    ]),
     # waiting screen: ELRS radio (64x64), waves drawn separately so they can pulse
     "ic_radio": (64, [
         (rrect(7, 25, 50, 30, 9), WHITE, 2.6, None),

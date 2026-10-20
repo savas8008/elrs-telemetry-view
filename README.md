@@ -24,7 +24,7 @@ radio's telemetry **on a map**. No MAVLink needed: it reads the CRSF telemetry t
 ## Features
 
 - **Full-screen map**: Satellite, Topographic, Street (Esri) or OpenStreetMap
-- **Offline maps**: download the visible area for use without internet
+- **Offline maps**: search a place, frame your flying field on the map and download it at home, without the radio
 - **Aircraft icon** rotated to heading, **flight track**, **home** marker and a line to home
 - **Follow mode**: the map tracks the aircraft; dragging the map turns it off, the follow button turns it back on
 - **Artificial horizon** with compass tape
@@ -43,7 +43,7 @@ radio's telemetry **on a map**. No MAVLink needed: it reads the CRSF telemetry t
 
 1. **Install the APK**: download the latest `ELRS-Telemetry-*.apk` from this repository's **Releases**
    and open it (allow "install unknown apps"). Requires Android 10 or newer.
-2. **Download offline maps** for your flying area while you still have internet (⚙ Settings → Map & offline maps).
+2. **Download offline maps** for your flying area while you still have internet (*Offline maps* on the waiting screen).
 3. On the radio, set **Link Mode = Normal** (not MAVLink).
 4. ELRS Lua → **Backpack → Telemetry → WiFi**. If it already shows WiFi, set it to Off and back to WiFi.
    The backpack restarts; wait a few seconds.
@@ -58,10 +58,21 @@ radio's telemetry **on a map**. No MAVLink needed: it reads the CRSF telemetry t
 
 The phone is on the backpack WiFi during flight, so there is no internet for map tiles.
 
-1. At home (or anywhere with internet), open the app and pan/zoom the map to your flying field.
-2. ⚙ **Settings → Map & offline maps**: pick the layer and a **detail level** (max zoom 15–18).
-   The screen shows the number of tiles and the approximate size.
-3. Tap **Download visible area**. Progress is shown in the settings screen and at the bottom of the left panel.
+No radio or goggles are needed for this — do it at home before the flight:
+
+1. Open the app on a network **with internet** (home WiFi or mobile data, not the backpack WiFi).
+2. On the *Waiting for connection* screen tap **Offline maps**
+   (or ⚙ **Settings → Map & offline maps → Choose area on map…**).
+3. Type a place name in the search box, or paste coordinates such as `37.0742, 36.2464`
+   (e.g. copied from Google Maps). Then pan and zoom until your flying field fills the
+   **dashed frame** — the framed area is what gets downloaded.
+4. Pick the layer (Satellite, Topographic, Street) and the **detail level** (max zoom 15–18).
+   The panel shows the number of tiles and the approximate size.
+5. Tap **Download area**. Progress is shown in the panel; you can leave with **Done** and the
+   download continues. Repeat for other fields — every downloaded area stays in the cache.
+
+Each download also includes the zoom levels from 8 upward, so a zoomed-out overview of the
+area is available offline too.
 
 Notes:
 - Downloads are limited to 30,000 tiles per area; zoom in or lower the detail level for larger areas.
@@ -227,6 +238,7 @@ permission needed). Open them with a file manager or import them into a spreadsh
 | `FlightStats.java` | Flight time, min/max values, chart history |
 | `FlightLogger.java` | CSV logging (MediaStore → Downloads) |
 | `GcsMap.java`, `PlaneOverlay.java` | osmdroid map, layers, offline downloads, track, aircraft/home drawing |
+| `OfflineMapPlanner.java` | offline map screen: place search, download frame, layer/detail choice, progress |
 | `NetRouter.java` | Binds telemetry to WiFi and routes map traffic to mobile data when available |
 | `HorizonView.java`, `BatteryView.java`, `SparklineView.java` | Instruments |
 | `Alerts.java` | Spoken alarms and vibration |

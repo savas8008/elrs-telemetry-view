@@ -88,6 +88,15 @@ public class GcsScreenshotTest {
         render(decor, decor.getWidth() > 0 ? decor.getWidth() : 1640, decor.getHeight() > 0 ? decor.getHeight() : 780,
                 "waiting.png");
 
+        // Offline map planner (no telemetry needed)
+        a.map().startAt(37.0742, 36.2464, 13.0);
+        a.openOfflineMapPlanner();
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(600));
+        render(decor, decor.getWidth() > 0 ? decor.getWidth() : 1640, decor.getHeight() > 0 ? decor.getHeight() : 780,
+                "offline.png");
+        a.closePlanner();
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(200));
+
         DatagramSocket tx = new DatagramSocket();
         InetAddress lo = InetAddress.getLoopbackAddress();
         double homeLat = 37.0742, homeLon = 36.2464;
