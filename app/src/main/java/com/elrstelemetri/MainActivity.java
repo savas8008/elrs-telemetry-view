@@ -426,10 +426,14 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         if (sameDevice) {
             b.setMessage("RTMP URL copied to the clipboard:\n\n" + url
                     + "\n\nIn DJI Fly: Live streaming › RTMP › paste the URL and start streaming."
-                    + "\n\nTip: use split screen so this app keeps receiving while DJI Fly is open.")
+                    + "\n\nImportant: DJI Fly stops sending video when it is not visible. Keep both apps on "
+                    + "screen with split screen (Recent apps › DJI Fly icon › Split screen) or a pop-up "
+                    + "window. You can make DJI Fly's part small. For the most reliable setup run DJI Fly on a "
+                    + "second phone (see the README).")
                     .setPositiveButton("Open DJI Fly", (d, w) -> {
-                        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        if (isInMultiWindowMode()) launch.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT);
+                        // ask for the adjacent split-screen window; large screens may open split screen directly
+                        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT
+                                | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
                         try {
                             startActivity(launch);
                         } catch (Exception e) {
@@ -639,6 +643,9 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
                 ? "Video: waiting for DJI Fly stream\n" + primaryStreamUrl()
                 : rtmpError);
         videoPanel.refresh(now);
+        if (settings.videoEnabled && videoPanel.isStalled()) {
+            notices.add("DJI Fly stopped sending video — keep DJI Fly visible (split screen) or use a second phone");
+        }
         if (!rtmpError.isEmpty()) notices.add(rtmpError);
 
         // Logging on/off

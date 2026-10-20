@@ -103,7 +103,7 @@ low-latency mode where available.
 
 | Setup | How | Notes |
 |---|---|---|
-| **A. One device** | DJI Fly and this app on the same phone/tablet (goggles on USB). URL `rtmp://127.0.0.1:1935/live/dji` (the DJI Fly ▶ button copies it). | Use split screen so both apps stay visible. The receiver keeps running while the app is in the background, but Android may pause background apps, and whether DJI Fly keeps streaming in the background has not been verified. |
+| **A. One device** | DJI Fly and this app on the same phone/tablet (goggles on USB). URL `rtmp://127.0.0.1:1935/live/dji` (the DJI Fly ▶ button copies it). | **DJI Fly stops sending video when it is not visible** (observed in testing). Keep both apps on screen with split screen or a pop-up/freeform window; DJI Fly's part can be small. |
 | **B. Hotspot on the GCS tablet (recommended for two devices)** | Turn on the tablet's hotspot. Set it as the backpack's **home network** (connect to the backpack WiFi, open `http://10.0.0.1`, enter the hotspot SSID/password; or set the backpack's WiFi SSID/password when flashing with the Configurator). Connect the DJI Fly phone to the same hotspot. URL `rtmp://<tablet hotspot IP>:1935/live/dji` (shown in Settings). | The backpack then broadcasts telemetry on the hotspot network. If the tablet has mobile data, the hotspot can also give the map internet. If the backpack can't find the home network it falls back to its own access point after ~30 s. |
 | C. Both on the backpack WiFi | Connect the DJI Fly phone to the backpack WiFi too. | Not recommended: the backpack's small ESP32 access point has to relay the video and may not have the bandwidth. |
 
@@ -115,8 +115,10 @@ Notes:
   keeps the app alive while DJI Fly is in front, so the video receiver, telemetry, spoken alarms and
   logging keep working. Without it Android pauses the app, the receiver stops reading, and DJI Fly
   drops the stream. Use **Exit** in the notification to close the app completely.
-- When a stream ends, the video panel shows the time and the reason (e.g. "publisher disconnected" =
-  DJI Fly stopped sending).
+- When the video stops, the panel turns black (the last frame is never left on screen) and says why:
+  "DJI Fly stopped sending" (connection still open, typically DJI Fly went to the background) or
+  "publisher disconnected" (DJI Fly closed the connection). When video resumes, the picture comes back
+  at the next key frame.
 - Port 1935 by default; configurable.
 
 ## Screen
@@ -203,7 +205,7 @@ permission needed). Open them with a file manager or import them into a spreadsh
 | Map is empty/grey | The area was not downloaded. Download it before connecting to the backpack WiFi. |
 | No position | Is GPS enabled on the aircraft with GPS telemetry, with enough satellites? |
 | No voice | Install/enable an English voice in Android's text-to-speech settings. |
-| Video stops when switching between DJI Fly and this app | Make sure **Keep running in the background** is on (notification visible). If the panel shows "publisher disconnected", DJI Fly itself stopped streaming when it went to the background: use split screen so DJI Fly stays visible. |
+| Video stops when switching from DJI Fly to this app | DJI Fly pauses live streaming when it is not visible. The panel then shows "DJI Fly stopped sending" (connection still open) or "publisher disconnected". Keep DJI Fly visible with split screen / a pop-up window, or run DJI Fly on a second phone (setup B). Also keep **Keep running in the background** on. |
 | No video | Is the DJI Fly device on the same network? Use a URL from Settings › Video stream (not 127.0.0.1 unless DJI Fly runs on the same device). Check that DJI Fly reports "streaming". |
 
 ## Technical details (verified against the source code)

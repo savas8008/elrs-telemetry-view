@@ -51,7 +51,9 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
     private byte[] csd0, csd1;
     private boolean waitForKey = true;
     private volatile int videoW, videoH;
-    private volatile long lastFrameTime;
+    private volatile long lastFrameTime;   // last frame rendered by the decoder
+    private volatile long lastDataTime;    // last video data received from the publisher
+    private volatile boolean hadVideo;     // video arrived on the current connection
     private volatile long frameCount;
     private volatile boolean connected;
     private volatile String remote = "";
@@ -91,12 +93,28 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
         if (live) {
             status.setText("");
             status.setBackgroundColor(Color.TRANSPARENT);
-        } else {
-            String t = connected ? "Stream connected from " + remote + "\nwaiting for video…" : idleText;
-            if (!connected && !lastEnd.isEmpty()) t += "\n" + lastEnd;
-            status.setText(t);
-            status.setBackgroundColor(Color.argb(170, 0, 0, 0));
+            return;
         }
+        String t;
+        if (connected && hadVideo) {
+            // DJI Fly keeps the connection open but stopped sending (e.g. it went to the background)
+            t = "No video for " + ((now - lastDataTime) / 1000) + " s — DJI Fly stopped sending.\n"
+                    + "DJI Fly pauses live streaming while it is not visible:\n"
+                    + "keep it on screen (split screen / pop-up window) or run it on a second device.";
+        } else if (connected) {
+            t = "Stream connected from " + remote + "\nwaiting for video…";
+        } else {
+            t = idleText;
+            if (!lastEnd.isEmpty()) t += "\n" + lastEnd;
+        }
+        status.setText(t);
+        // Opaque: never leave the last decoded frame visible, it would look like live video
+        status.setBackgroundColor(Color.BLACK);
+    }
+
+    /** True while connected but the publisher has stopped sending video. */
+    public boolean isStalled() {
+        return connected && hadVideo && System.currentTimeMillis() - lastDataTime > 3000;
     }
 
     public boolean isConnected() {
@@ -121,6 +139,7 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
     @Override
     public void onPublish(String app, String streamKey, String remoteAddr) {
         connected = true;
+        hadVideo = false;
         remote = remoteAddr.replace("/", "");
         synchronized (lock) {
             waitForKey = true;
@@ -143,7 +162,13 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
 
     @Override
     public void onVideoFrame(byte[] annexB, long ptsMs, boolean keyFrame) {
+        long now = System.currentTimeMillis();
+        boolean gap = hadVideo && now - lastDataTime > 1000;
+        lastDataTime = now;
+        hadVideo = true;
         synchronized (lock) {
+            // after a pause the decoder needs a key frame, otherwise it shows corrupted images
+            if (gap) waitForKey = true;
             if (codec == null) return;
             if (waitForKey && !keyFrame) return;
             try {
@@ -169,6 +194,7 @@ public final class VideoPanel extends FrameLayout implements RtmpServer.Listener
     @Override
     public void onDisconnect(String reason) {
         connected = false;
+        hadVideo = false;
         lastEnd = "Last stream ended " + new java.text.SimpleDateFormat("HH:mm:ss", Locale.US).format(new java.util.Date())
                 + " (" + reason + ")";
         ui.post(() -> {
