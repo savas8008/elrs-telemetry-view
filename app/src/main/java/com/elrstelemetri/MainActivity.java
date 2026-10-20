@@ -840,8 +840,8 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         t.setGravity(Gravity.CENTER);
         t.setBackground(roundBg(C_PANEL, 22));
         t.setOnClickListener(l);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(42), dp(42));
-        lp.setMargins(dp(4), 0, dp(4), 0);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(40), dp(40));
+        lp.setMargins(dp(3), 0, dp(3), 0);
         parent.addView(t, lp);
         return t;
     }
@@ -1015,7 +1015,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         dji.setPadding(dp(12), 0, dp(12), 0);
         dji.setBackground(roundBg(Color.argb(220, 30, 30, 34), 22));
         dji.setOnClickListener(v -> openDjiFly());
-        LinearLayout.LayoutParams djl = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(42));
+        LinearLayout.LayoutParams djl = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(40));
         djl.setMargins(dp(8), 0, dp(4), 0);
         buttons.addView(dji, djl);
         FrameLayout.LayoutParams bl = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT,

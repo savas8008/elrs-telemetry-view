@@ -52,7 +52,7 @@ public class GcsMap {
     }
 
     static final OnlineTileSourceBase SATELLITE = esri("EsriWorldImagery", "World_Imagery",
-            "Imagery © Esri, Maxar, Earthstar Geographics");
+            "© Esri, Maxar, Earthstar");
     static final OnlineTileSourceBase TOPO = esri("EsriWorldTopo", "World_Topo_Map",
             "© Esri and contributors");
     static final OnlineTileSourceBase STREET = esri("EsriWorldStreet", "World_Street_Map",
@@ -112,11 +112,15 @@ public class GcsMap {
 
         ScaleBarOverlay scale = new ScaleBarOverlay(view);
         scale.setAlignBottom(true);
-        scale.setScaleBarOffset((int) (12 * density), (int) (64 * density));
+        scale.setScaleBarOffset((int) (10 * density), (int) (20 * density));
+        scale.setMaxLength(0.8f);  // inches; keeps it clear of the centred button bar
 
         CopyrightOverlay copyright = new CopyrightOverlay(c);
-        copyright.setAlignRight(true);  // bottom-left corner is used by the coordinate box
+        // bottom-left under the scale bar: the bottom centre/right is used by the buttons
+        copyright.setAlignRight(false);
         copyright.setAlignBottom(true);
+        copyright.setTextSize(9);
+        copyright.setOffset((int) (10 * density), (int) (4 * density));
 
         view.getOverlays().add(trackShadow);
         view.getOverlays().add(track);
