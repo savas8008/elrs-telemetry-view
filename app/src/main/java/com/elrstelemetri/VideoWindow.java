@@ -1,0 +1,200 @@
+package com.elrstelemetri;
+
+import android.annotation.SuppressLint;
+import android.content.Context;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.ViewConfiguration;
+import android.widget.FrameLayout;
+import android.widget.TextView;
+
+/**
+ * Floating container for the video: drag the window to move it, drag the ◢ corner to resize it,
+ * tap to toggle between the panel and "replace the map". Stays inside its parent.
+ */
+public final class VideoWindow extends FrameLayout {
+
+    public interface Listener {
+        void onTap();
+
+        /** Position or size changed by the user (to persist it). */
+        void onGeometryChanged();
+    }
+
+    public final VideoPanel video;
+    private final TextView handle;
+    private final int slop;
+    private final int minW, minH;
+    private Listener listener;
+    private boolean floating = true;
+
+    private float downX, downY;
+    private int startL, startT, startW, startH;
+    private boolean dragging;
+
+    @SuppressLint("ClickableViewAccessibility")
+    public VideoWindow(Context c, VideoPanel video) {
+        super(c);
+        this.video = video;
+        slop = ViewConfiguration.get(c).getScaledTouchSlop();
+        minW = dp(160);
+        minH = dp(90);
+        addView(video, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+
+        handle = new TextView(c);
+        handle.setText("◢");
+        handle.setTextSize(20);
+        handle.setTextColor(Color.WHITE);
+        handle.setGravity(Gravity.CENTER);
+        GradientDrawable hb = new GradientDrawable();
+        hb.setColor(Color.argb(150, 0, 0, 0));
+        hb.setCornerRadius(dp(6));
+        handle.setBackground(hb);
+        LayoutParams hl = new LayoutParams(dp(34), dp(34), Gravity.BOTTOM | Gravity.END);
+        addView(handle, hl);
+        handle.setOnTouchListener(this::onResizeTouch);
+    }
+
+    private int dp(float v) {
+        return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, getResources().getDisplayMetrics()));
+    }
+
+    public void setListener(Listener l) {
+        listener = l;
+    }
+
+    /** Floating panel (movable/resizable) or filling the parent. */
+    public void setFloating(boolean f) {
+        floating = f;
+        handle.setVisibility(f ? View.VISIBLE : View.GONE);
+    }
+
+    public boolean isFloating() {
+        return floating;
+    }
+
+    private int parentW() {
+        View p = (View) getParent();
+        return p == null ? 0 : p.getWidth();
+    }
+
+    private int parentH() {
+        View p = (View) getParent();
+        return p == null ? 0 : p.getHeight();
+    }
+
+    /** Places the floating window in pixels, clamped to the parent. */
+    public void setGeometry(int left, int top, int w, int h) {
+        int pw = parentW(), ph = parentH();
+        if (pw > 0 && ph > 0) {
+            w = Math.max(minW, Math.min(w, pw));
+            h = Math.max(minH, Math.min(h, ph));
+            left = Math.max(0, Math.min(left, pw - w));
+            top = Math.max(0, Math.min(top, ph - h));
+        }
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(w, h, Gravity.TOP | Gravity.START);
+        lp.leftMargin = left;
+        lp.topMargin = top;
+        setLayoutParams(lp);
+    }
+
+    /** Fills the parent (video replaces the map). */
+    public void fillParent() {
+        setLayoutParams(new FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+    }
+
+    /** Current geometry as fractions of the parent: {x, y, w, h}. */
+    public float[] geometryFractions() {
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) getLayoutParams();
+        int pw = Math.max(1, parentW()), ph = Math.max(1, parentH());
+        int w = lp.width > 0 ? lp.width : getWidth();
+        int h = lp.height > 0 ? lp.height : getHeight();
+        return new float[]{lp.leftMargin / (float) pw, lp.topMargin / (float) ph, w / (float) pw, h / (float) ph};
+    }
+
+    // ---------------------------------------------------------------- Move / tap
+
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent e) {
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                beginGesture(e);
+                return false;
+            case MotionEvent.ACTION_MOVE:
+                return floating && moved(e);
+            default:
+                return false;
+        }
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    @Override
+    public boolean onTouchEvent(MotionEvent e) {
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                beginGesture(e);
+                return true;
+            case MotionEvent.ACTION_MOVE:
+                if (floating && (dragging || moved(e))) {
+                    dragging = true;
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                    setGeometry(startL + Math.round(e.getRawX() - downX), startT + Math.round(e.getRawY() - downY),
+                            startW, startH);
+                }
+                return true;
+            case MotionEvent.ACTION_UP:
+                if (dragging) {
+                    if (listener != null) listener.onGeometryChanged();
+                } else if (listener != null) {
+                    listener.onTap();
+                }
+                dragging = false;
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                dragging = false;
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    private void beginGesture(MotionEvent e) {
+        downX = e.getRawX();
+        downY = e.getRawY();
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) getLayoutParams();
+        startL = lp.leftMargin;
+        startT = lp.topMargin;
+        startW = getWidth();
+        startH = getHeight();
+        dragging = false;
+    }
+
+    private boolean moved(MotionEvent e) {
+        return Math.abs(e.getRawX() - downX) > slop || Math.abs(e.getRawY() - downY) > slop;
+    }
+
+    // ---------------------------------------------------------------- Resize
+
+    private boolean onResizeTouch(View v, MotionEvent e) {
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                beginGesture(e);
+                getParent().requestDisallowInterceptTouchEvent(true);
+                return true;
+            case MotionEvent.ACTION_MOVE:
+                setGeometry(startL, startT, startW + Math.round(e.getRawX() - downX),
+                        startH + Math.round(e.getRawY() - downY));
+                return true;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (listener != null) listener.onGeometryChanged();
+                return true;
+            default:
+                return true;
+        }
+    }
+}

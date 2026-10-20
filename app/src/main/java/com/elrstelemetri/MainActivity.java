@@ -3,7 +3,10 @@ package com.elrstelemetri;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -77,9 +80,10 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     private String downloadStatus = "";
     private boolean downloading;
     private VideoPanel videoPanel;
+    private VideoWindow videoWindow;
+    private FrameLayout gcsRoot;
     private RtmpServer rtmp;
     private String rtmpError = "";
-    private boolean videoActiveShown;
 
     // Derived values (UI thread)
     private double curRelAlt = Double.NaN, curHeading, curDist = Double.NaN, curCell = Double.NaN;
@@ -126,7 +130,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             public void onStreamStarted(String remote) {
                 Toast.makeText(MainActivity.this, "Video stream connected: " + remote, Toast.LENGTH_SHORT).show();
                 if (settings.videoMode == Settings.VIDEO_OFF) {
-                    settings.videoMode = Settings.VIDEO_PIP;
+                    settings.videoMode = Settings.VIDEO_PANEL;
                     applyVideoMode();
                 }
             }
@@ -134,6 +138,25 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             @Override
             public void onStreamStopped() {
                 Toast.makeText(MainActivity.this, "Video stream ended", Toast.LENGTH_SHORT).show();
+            }
+        });
+        videoWindow = new VideoWindow(this, videoPanel);
+        videoWindow.setListener(new VideoWindow.Listener() {
+            @Override
+            public void onTap() {
+                settings.videoMode = settings.videoMode == Settings.VIDEO_REPLACE_MAP
+                        ? Settings.VIDEO_PANEL : Settings.VIDEO_REPLACE_MAP;
+                applyVideoMode();
+            }
+
+            @Override
+            public void onGeometryChanged() {
+                float[] g = videoWindow.geometryFractions();
+                settings.videoX = g[0];
+                settings.videoY = g[1];
+                settings.videoW = g[2];
+                settings.videoH = g[3];
+                settings.save(prefs);
             }
         });
         setContentView(buildUi());
@@ -176,7 +199,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         mcLock.acquire();  // some phones drop broadcast packets without this lock
         router.start();
         startReceiver();
-        startVideo();
+        if (rtmp == null) startVideo();
         ui.post(tick);
         ui.post(logTick);
     }
@@ -186,7 +209,6 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         ui.removeCallbacks(tick);
         ui.removeCallbacks(logTick);
         stopReceiver();
-        stopVideo();
         router.stop();
         logger.close();
         if (mcLock != null && mcLock.isHeld()) mcLock.release();
@@ -196,6 +218,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
     @Override
     protected void onDestroy() {
         alerts.shutdown();
+        stopVideo();
         videoPanel.release();
         super.onDestroy();
     }
@@ -299,20 +322,78 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
 
     private void applyVideoMode() {
         boolean show = settings.videoEnabled && settings.videoMode != Settings.VIDEO_OFF;
-        videoPanel.setVisibility(show ? View.VISIBLE : View.GONE);
+        boolean replace = show && settings.videoMode == Settings.VIDEO_REPLACE_MAP;
+        videoWindow.setVisibility(show ? View.VISIBLE : View.GONE);
+        map.view.setVisibility(replace ? View.INVISIBLE : View.VISIBLE);
         if (!show) return;
-        FrameLayout.LayoutParams lp;
-        if (settings.videoMode == Settings.VIDEO_FULL) {
-            lp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
-        } else if (videoActiveShown) {
-            lp = new FrameLayout.LayoutParams(dp(320), dp(180), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-            lp.setMargins(0, 0, 0, dp(58));
-        } else {
-            // no stream yet: a compact strip with the URL instead of a big empty box over the map
-            lp = new FrameLayout.LayoutParams(dp(300), dp(62), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-            lp.setMargins(0, 0, 0, dp(58));
+        if (replace) {
+            videoWindow.setFloating(false);
+            videoWindow.fillParent();
+            return;
         }
-        videoPanel.setLayoutParams(lp);
+        videoWindow.setFloating(true);
+        int pw = gcsRoot.getWidth(), ph = gcsRoot.getHeight();
+        if (pw == 0 || ph == 0) {          // not laid out yet
+            gcsRoot.post(this::applyVideoMode);
+            return;
+        }
+        if (settings.videoW > 0 && settings.videoH > 0) {
+            videoWindow.setGeometry(Math.round(settings.videoX * pw), Math.round(settings.videoY * ph),
+                    Math.round(settings.videoW * pw), Math.round(settings.videoH * ph));
+        } else {
+            int[] p = Settings.VIDEO_PRESETS[1];  // default: Medium, centred above the buttons
+            int w = dp(p[0]), h = dp(p[1]);
+            videoWindow.setGeometry((pw - w) / 2, ph - h - dp(58), w, h);
+        }
+    }
+
+    /** Copies the RTMP URL and opens DJI Fly, or explains how to connect if that isn't possible. */
+    private void openDjiFly() {
+        String djiPackage = "dji.go.v5";
+        Intent launch = getPackageManager().getLaunchIntentForPackage(djiPackage);
+        boolean sameDevice = launch != null;
+        // DJI Fly on this device streams to localhost; on another device it needs this device's network address
+        String url = sameDevice ? "rtmp://127.0.0.1:" + settings.videoPort + "/live/dji" : primaryStreamUrl();
+        ClipboardManager cb = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (cb != null) cb.setPrimaryClip(ClipData.newPlainText("RTMP URL", url));
+        if (!settings.videoEnabled) {
+            settings.videoEnabled = true;
+            settings.save(prefs);
+            startVideo();
+        }
+        if (settings.videoMode == Settings.VIDEO_OFF) {
+            settings.videoMode = Settings.VIDEO_PANEL;
+            applyVideoMode();
+        }
+
+        AlertDialog.Builder b = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Stream from DJI Fly");
+        if (sameDevice) {
+            b.setMessage("RTMP URL copied to the clipboard:\n\n" + url
+                    + "\n\nIn DJI Fly: Live streaming › RTMP › paste the URL and start streaming."
+                    + "\n\nTip: use split screen so this app keeps receiving while DJI Fly is open.")
+                    .setPositiveButton("Open DJI Fly", (d, w) -> {
+                        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        if (isInMultiWindowMode()) launch.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT);
+                        try {
+                            startActivity(launch);
+                        } catch (Exception e) {
+                            Toast.makeText(this, "Could not open DJI Fly: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                        }
+                    })
+                    .setNegativeButton("Cancel", null);
+        } else {
+            StringBuilder all = new StringBuilder();
+            for (String u : VideoPanel.streamUrls(settings.videoPort)) {
+                if (!u.contains("127.0.0.1")) all.append(u).append('\n');
+            }
+            b.setMessage("DJI Fly is not installed on this device, so it can't be opened from here.\n\n"
+                    + "On the phone connected to the goggles, open DJI Fly › Live streaming › RTMP and enter "
+                    + "this URL (copied to the clipboard):\n\n" + url
+                    + "\n\nBoth devices must be on the same network. All addresses of this device:\n" + all)
+                    .setPositiveButton("OK", null);
+        }
+        b.show();
     }
 
     // ================================================================ Update loops
@@ -503,11 +584,6 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
                 ? "Video: waiting for DJI Fly stream\n" + primaryStreamUrl()
                 : rtmpError);
         videoPanel.refresh(now);
-        boolean active = videoPanel.isLive() || videoPanel.isConnected();
-        if (active != videoActiveShown) {
-            videoActiveShown = active;
-            applyVideoMode();
-        }
         if (!rtmpError.isEmpty()) notices.add(rtmpError);
 
         // Logging on/off
@@ -776,11 +852,8 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         root.addView(map.view, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         // Video sits above the map and below the panels, so in full-screen mode telemetry overlays the video
-        root.addView(videoPanel);
-        videoPanel.setOnClickListener(v -> {
-            settings.videoMode = settings.videoMode == Settings.VIDEO_FULL ? Settings.VIDEO_PIP : Settings.VIDEO_FULL;
-            applyVideoMode();
-        });
+        root.addView(videoWindow);
+        gcsRoot = root;
 
         // ---- Top bar
         LinearLayout top = new LinearLayout(this);
@@ -833,6 +906,12 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         r = row(leftPanel);
         vHomeDir = stat(r, "TO HOME", 15);
         vGpsAlt = stat(r, "GPS ALT (MSL)", 15);
+        // Position, log file, downloads and video info (the bottom edge is reserved for the buttons)
+        tInfo = text(10, C_LABEL, false);
+        tInfo.setSingleLine(false);
+        tInfo.setMaxLines(4);
+        tInfo.setPadding(dp(6), dp(4), dp(4), 0);
+        leftPanel.addView(tInfo);
         FrameLayout.LayoutParams llp = new FrameLayout.LayoutParams(dp(210), FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP | Gravity.START);
         llp.setMargins(dp(8), dp(56), 0, 0);
@@ -889,17 +968,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         wlp.setMargins(dp(230), dp(58), dp(230), 0);
         root.addView(tWarn, wlp);
 
-        // ---- Bottom: info + map buttons
-        tInfo = text(11, C_TEXT, false);
-        tInfo.setSingleLine(false);
-        tInfo.setMaxLines(3);
-        tInfo.setMaxWidth(dp(230));
-        tInfo.setPadding(dp(10), dp(4), dp(10), dp(4));
-        tInfo.setBackground(roundBg(C_PANEL, 8));
-        FrameLayout.LayoutParams ilp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.START);
-        ilp.setMargins(dp(8), 0, 0, dp(10));
-        root.addView(tInfo, ilp);
+        // ---- Bottom: map buttons
 
         LinearLayout buttons = new LinearLayout(this);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
@@ -929,8 +998,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
             }
             settings.videoMode = (settings.videoMode + 1) % 3;
             applyVideoMode();
-            String[] names = {"Video hidden", "Video: picture-in-picture", "Video: full screen"};
-            Toast.makeText(this, names[settings.videoMode], Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Video: " + Settings.VIDEO_MODE_NAMES[settings.videoMode], Toast.LENGTH_SHORT).show();
         });
         mapButton(buttons, "▣", v -> {
             settings.showPanels = !settings.showPanels;
@@ -938,6 +1006,18 @@ public class MainActivity extends Activity implements SettingsDialog.Host {
         });
         mapButton(buttons, "📊", v -> showSummary());
         mapButton(buttons, "⚙", v -> showSettings());
+        TextView dji = new TextView(this);
+        dji.setText("DJI Fly ▶");
+        dji.setTextSize(14);
+        dji.setTypeface(Typeface.DEFAULT_BOLD);
+        dji.setTextColor(Color.WHITE);
+        dji.setGravity(Gravity.CENTER);
+        dji.setPadding(dp(12), 0, dp(12), 0);
+        dji.setBackground(roundBg(Color.argb(220, 30, 30, 34), 22));
+        dji.setOnClickListener(v -> openDjiFly());
+        LinearLayout.LayoutParams djl = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(42));
+        djl.setMargins(dp(8), 0, dp(4), 0);
+        buttons.addView(dji, djl);
         FrameLayout.LayoutParams bl = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         bl.setMargins(0, 0, 0, dp(8));

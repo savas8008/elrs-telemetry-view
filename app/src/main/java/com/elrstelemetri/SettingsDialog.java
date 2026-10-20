@@ -305,6 +305,35 @@ public class SettingsDialog {
         EditText port = number(String.valueOf(s.videoPort), false, false);
         row.addView(port, new LinearLayout.LayoutParams(dp(90), LinearLayout.LayoutParams.WRAP_CONTENT));
         card.addView(row);
+
+        card.addView(label("Display"));
+        RadioGroup mode = radio(card, new String[]{
+                "Hidden",
+                "Floating panel — drag to move, drag the ◢ corner to resize",
+                "Replace the map — video fills the screen, telemetry on top"}, s.videoMode, false);
+        card.addView(label("Panel size"));
+        final int[] preset = {-1};
+        TextView presetInfo = label("Current: " + describeGeometry());
+        presetInfo.setTextColor(C_LABEL);
+        presetInfo.setTextSize(12);
+        LinearLayout sizes = new LinearLayout(ctx);
+        sizes.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i = 0; i < Settings.VIDEO_PRESETS.length; i++) {
+            final int idx = i;
+            int[] p = Settings.VIDEO_PRESETS[i];
+            sizes.addView(button(Settings.VIDEO_PRESET_NAMES[i] + " " + p[0] + "×" + p[1], false, v -> {
+                preset[0] = idx;
+                presetInfo.setText("Selected: " + Settings.VIDEO_PRESET_NAMES[idx]
+                        + " (placed above the buttons; drag it afterwards to move or resize)");
+            }));
+        }
+        card.addView(sizes);
+        card.addView(presetInfo);
+        savers.add(() -> {
+            s.videoMode = checkedIndex(mode, s.videoMode);
+            if (preset[0] >= 0) applyPreset(preset[0]);
+        });
+
         hint(card, "In DJI Fly (goggles connected over USB): Live streaming › RTMP, then enter one of these URLs. "
                 + "The device running DJI Fly must be on the same network as this device:");
         StringBuilder urls = new StringBuilder();
@@ -322,6 +351,24 @@ public class SettingsDialog {
             int p = (int) parse(port, s.videoPort, "RTMP port");
             if (p >= 1024 && p <= 65535) s.videoPort = p;
         });
+    }
+
+    private String describeGeometry() {
+        if (s.videoW <= 0) return "default (Medium, above the buttons)";
+        android.util.DisplayMetrics m = ctx.getResources().getDisplayMetrics();
+        return Math.round(s.videoW * m.widthPixels / m.density) + "×" + Math.round(s.videoH * m.heightPixels / m.density)
+                + " dp, custom position";
+    }
+
+    /** Sets a preset panel size, centred above the bottom buttons. */
+    private void applyPreset(int i) {
+        android.util.DisplayMetrics m = ctx.getResources().getDisplayMetrics();
+        float sw = m.widthPixels, sh = m.heightPixels;
+        float w = Settings.VIDEO_PRESETS[i][0] * m.density, h = Settings.VIDEO_PRESETS[i][1] * m.density;
+        s.videoW = Math.min(1f, w / sw);
+        s.videoH = Math.min(1f, h / sh);
+        s.videoX = Math.max(0f, (sw - w) / 2 / sw);
+        s.videoY = Math.max(0f, (sh - h - 58 * m.density) / sh);
     }
 
     private void save() {
