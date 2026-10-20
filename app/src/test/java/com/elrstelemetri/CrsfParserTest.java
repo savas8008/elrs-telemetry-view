@@ -134,4 +134,25 @@ public class CrsfParserTest {
         assertEquals(1000.8, s.homeDistanceM(), 2.0);
         assertEquals(0.0, s.homeBearingDeg(), 0.5);
     }
+
+    /**
+     * Backpack'in gerçek UDP biçimi (Backpack Tx_main.cpp / msp.cpp):
+     * '$' 'X' '<' flags func(LE16=0x0011) size(LE16) [tam CRSF çerçevesi] crc8
+     */
+    @Test
+    public void backpackMspSarmaliUdpPaketi() {
+        TelemetryState s = new TelemetryState();
+        CrsfParser p = new CrsfParser(s);
+        byte[] crsf = frame(CrsfParser.LINK_STATS, 40, 45, 100, 8, 0, 7, 2, 50, 100, 7);
+        byte[] dg = new byte[8 + crsf.length + 1];
+        dg[0] = '$'; dg[1] = 'X'; dg[2] = '<'; dg[3] = 0;
+        dg[4] = 0x11; dg[5] = 0;
+        dg[6] = (byte) crsf.length; dg[7] = 0;
+        System.arraycopy(crsf, 0, dg, 8, crsf.length);
+        dg[dg.length - 1] = (byte) CrsfParser.crc8(dg, 3, 5 + crsf.length);
+        assertEquals(1, p.feed(dg, dg.length));
+        assertEquals(100, s.lq);
+        assertEquals(-40, s.rssi1);
+        assertEquals(25, s.txPowerMw);
+    }
 }

@@ -7,9 +7,11 @@ package com.elrstelemetri;
  *   uzunluk = tip + payload + crc bayt sayısı
  *   crc8    = DVB-S2 (polinom 0xD5), tip + payload üzerinden
  *
- * Backpack'in UDP paketinin içinde CRSF'i tam olarak nasıl paketlediği
- * doğrulanmadığı için ayrıştırıcı paketi bayt bayt tarar ve yalnızca
- * CRC'si tutan, uzunluğu tipine uyan çerçeveleri kabul eder.
+ * TX Backpack (Telemetry = WiFi) her CRSF çerçevesini bir MSP v2 paketine
+ * sarıp UDP broadcast ile gönderir:
+ *   '$' 'X' '<' flags func(0x0011, LE) size(LE) [CRSF çerçevesi] crc8
+ * Ayrıştırıcı paketi bayt bayt tarar ve yalnızca CRC'si tutan, uzunluğu
+ * tipine uyan CRSF çerçevelerini kabul eder; böylece MSP başlığına bağımlı olmaz.
  * Çerçeveler iki datagrama bölünürse diye artık baytlar saklanır.
  */
 public class CrsfParser {

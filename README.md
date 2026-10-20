@@ -33,13 +33,18 @@ Klasörü *Open* ile açın → senkronizasyon bitince ▶ Run (telefon USB'den 
 ### Kurulum
 APK'yı telefona atıp açın; "bilinmeyen kaynaklardan yüklemeye izin ver" uyarısını onaylayın.
 
-## Bilinen sınırlar / doğrulanmamış noktalar
+## Gereksinimler (kaynak koddan doğrulandı)
 
-- WiFi modunda CRSF'in UDP broadcast ile 14550'ye gönderildiği bilgisi üçüncü taraf bir kaynaktan
-  (SquirrelCast kılavuzu) gelir; Backpack 1.5.7+ gerekir. Bazı ESP32-C3 hedeflerinde 1.5.7'de
-  WiFi telemetrisi başlamayabilir (geçici çözüm: Link Mode'u MAVLink yapıp tekrar Normal'e almak).
-- UDP paketinin iç yapısı doğrulanmadığından uygulama paketi tarar ve yalnızca CRC'si ile
-  uzunluğu tutan CRSF çerçevelerini kabul eder.
+- **ELRS TX firmware 3.5.0+** (Lua'daki `Off;ESPNOW;WiFi` seçeneği ve CRSF telemetrisini backpack'e gönderme bu sürümle geldi).
+- **TX Backpack firmware 1.5.8+**. 1.5.7 ve öncesinde "Telemetry = WiFi" seçilince WiFi açılmıyor;
+  düzeltme Backpack deposundaki `2c863af` "Fix Normal TLM mode wifi" commit'i, ilk sürüm 1.5.8.
+- Link Mode **Normal** olmalı (MAVLink modunda CRSF telemetrisi backpack'e gönderilmez).
+- WiFi seçeneği değiştirildiğinde backpack ayarı kaydedip yeniden başlar; WiFi birkaç saniye sonra açılır.
+- Ağ: `ExpressLRS TX Backpack XXXXXX` (XXXXXX = bind phrase UID'sinin son 3 baytı), şifre `expresslrs`,
+  backpack IP `10.0.0.1`; paketler AP alt ağına broadcast, varsayılan port 14550.
+
+## Bilinen sınırlar
+
 - Lua script'lerinin hesapladığı türetilmiş değerlerin (alarm, özel hesaplar) hepsi burada yoktur.
 - Uygulama yalnızca ekrandayken dinler (arka plan servisi yok); ekran açık tutulur.
 
