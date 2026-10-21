@@ -9,6 +9,10 @@ Earlier test builds were signed with a temporary key. **Uninstall the old app on
 this version (Android shows "App not installed" otherwise). From this version on, new releases
 install as normal updates and keep your settings.
 
+### New in 1.2
+- Settings: the keyboard shows **Done** for every value; it closes the keyboard instead of jumping
+  through all the other inputs.
+
 ### New in 1.1
 - **In-app updates**: the app checks GitHub for new versions when internet is available and offers
   to install them (never during a flight). Android asks once to allow "Install unknown apps" for

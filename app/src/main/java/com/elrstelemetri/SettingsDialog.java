@@ -11,6 +11,10 @@ import android.text.InputType;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.view.inputmethod.InputMethodManager;
+import android.view.inputmethod.EditorInfo;
+import android.view.ViewGroup;
+import android.view.KeyEvent;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
@@ -75,6 +79,7 @@ public class SettingsDialog {
 
     private final List<Runnable> savers = new ArrayList<>();
     private Dialog dialog;
+    private View rootView;  // takes the focus when an input is finished, so no other input gets it
     private TextView downloadInfo;
 
     public SettingsDialog(Context ctx, Host host) {
@@ -94,6 +99,10 @@ public class SettingsDialog {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(C_BG);
+        // focusable root: no input is focused (keyboard closed) when the screen opens or after "Done"
+        root.setFocusableInTouchMode(true);
+        root.setDescendantFocusability(ViewGroup.FOCUS_BEFORE_DESCENDANTS);
+        rootView = root;
 
         // ---- Header
         LinearLayout header = new LinearLayout(ctx);
@@ -449,7 +458,26 @@ public class SettingsDialog {
         e.setTextColor(C_TEXT);
         e.setGravity(Gravity.END);
         e.setSelectAllOnFocus(true);
+        e.setSingleLine(true);
+        // "Done" instead of "Next": finishing one value closes the keyboard instead of jumping to the next input
+        e.setImeOptions(EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
+        e.setOnEditorActionListener((v, actionId, ev) -> {
+            boolean enter = ev != null && ev.getKeyCode() == KeyEvent.KEYCODE_ENTER;
+            if (actionId == EditorInfo.IME_ACTION_DONE || enter) {
+                finishInput(v);
+                return true;
+            }
+            return false;
+        });
         return e;
+    }
+
+    /** Closes the keyboard and moves the focus away from the input. */
+    private void finishInput(View v) {
+        InputMethodManager imm = ctx.getSystemService(InputMethodManager.class);
+        if (imm != null) imm.hideSoftInputFromWindow(v.getWindowToken(), 0);
+        if (rootView != null) rootView.requestFocus();
+        else v.clearFocus();
     }
 
     private RadioGroup radio(LinearLayout parent, String[] items, int checked, boolean horizontal) {
