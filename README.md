@@ -203,6 +203,17 @@ permission needed). Open them with a file manager or import them into a spreadsh
 
 **Settings → Show raw UDP data** shows incoming packets for troubleshooting.
 
+## Updates
+
+Download the APK from the [latest release](https://github.com/savas8008/elrs-telemetry-view/releases/latest).
+From version 1.1 the app updates itself: when internet is available it checks the GitHub releases
+(at most every 6 hours) and, if a newer version exists, asks to install it — never while flying.
+The APK is downloaded and handed to Android's installer, which only accepts it if it is signed with
+the same key as the installed app. The first time, Android asks to allow **Install unknown apps**
+for ELRS Telemetry. ⚙ **Settings › Updates**: automatic check on/off, **Check now**.
+
+Builds before v1.0 were signed with temporary keys: uninstall such a build once before installing v1.0+.
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -263,6 +274,7 @@ The top bar shows `drops N/M` once something happens: **N** = times the WiFi its
 | `AlarmSet.java` | Threshold alarms with hysteresis and arm-after-crossing logic |
 | `FlightStats.java` | Flight time, min/max values, chart history |
 | `FlightLogger.java` | CSV logging (MediaStore → Downloads) |
+| `Updater.java` | In-app updates from GitHub releases (check, download, package installer) |
 | `GcsMap.java`, `PlaneOverlay.java` | osmdroid map, layers, offline downloads, track, aircraft/home drawing |
 | `OfflineMapPlanner.java` | offline map screen: place search, download frame, layer/detail choice, progress |
 | `NetRouter.java` | Binds telemetry to WiFi and routes map traffic to mobile data when available |

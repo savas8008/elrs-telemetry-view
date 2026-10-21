@@ -113,6 +113,14 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
     // Offline map planner: full-screen area chooser over the map (usable without telemetry)
     private OfflineMapPlanner planner;
     private boolean planning;
+
+    // In-app updates (GitHub releases)
+    private static final long UPDATE_CHECK_EVERY_MS = 6 * 3600 * 1000L;
+    private volatile boolean updateChecking;
+    private volatile Updater.Release pendingUpdate;   // newer release, not yet offered
+    private Updater.Release awaitingInstallPermission;
+    private boolean updateDialogShown;
+    private boolean lastFlying;
     private TextView tMode, tArm, tTimer, tLq, tRssi, tSats, tRec, tLink, tWarn, tInfo;
     private TextView vAlt, vVario, vSpeed, vDist, vHomeDir, vGpsAlt;
     private TextView vCell, vCurr, vMah, vPower, vSnr, vTxPow, vDown, vRf;
@@ -250,6 +258,12 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
     protected void onResume() {
         super.onResume();
         map.onResume();
+        // back from "allow installing unknown apps": continue the update
+        Updater.Release r = awaitingInstallPermission;
+        if (r != null && Updater.canInstall(this)) {
+            awaitingInstallPermission = null;
+            startUpdate(r);
+        }
     }
 
     @Override
@@ -510,6 +524,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
             curArmedKnown = fMode.isFresh(s.modeTime, now) && !mode.isEmpty();
             curArmed = curArmedKnown && !mode.endsWith("*");
             boolean flying = linkFresh && (!curArmedKnown || curArmed);
+            lastFlying = flying;
 
             stats.update(now, flying, altValid ? curRelAlt : Double.NaN, gpsFresh ? curDist : Double.NaN,
                     gpsFresh ? s.groundSpeedKmh : Double.NaN,
@@ -662,6 +677,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
             waitDetail.setText(detail + connectionHealth(true));
         }
         setWaiting(waiting);
+        maybeCheckForUpdate(now);
         if (waiting || planning) return;
 
         if (lines.isEmpty()) {
@@ -672,6 +688,113 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
             ((GradientDrawable) tWarn.getBackground()).setColor(
                     !alarmLines.isEmpty() ? Color.argb(225, 200, 30, 30) : Color.argb(210, 40, 45, 55));
         }
+    }
+
+    // ================================================================ Updates
+
+    /** Background check every few hours while internet is available; offers the update when not flying. */
+    private void maybeCheckForUpdate(long now) {
+        Updater.Release r = pendingUpdate;
+        if (r != null && !updateDialogShown && !lastFlying && !planning) {
+            pendingUpdate = null;
+            showUpdateDialog(r);
+            return;
+        }
+        if (!settings.checkUpdates || updateChecking || !router.hasInternet()) return;
+        if (now - prefs.getLong("updateLastCheck", 0) < UPDATE_CHECK_EVERY_MS) return;
+        prefs.edit().putLong("updateLastCheck", now).apply();
+        checkForUpdate(false);
+    }
+
+    private void checkForUpdate(boolean manual) {
+        if (updateChecking) return;
+        updateChecking = true;
+        new Thread(() -> {
+            String msg = null;
+            try {
+                Updater.Release r = Updater.fetchLatest();
+                boolean skipped = r != null && r.version.equals(prefs.getString("updateSkipped", ""));
+                if (Updater.isNewer(this, r) && (manual || !skipped)) {
+                    if (manual) ui.post(() -> showUpdateDialog(r));
+                    else pendingUpdate = r;
+                } else if (manual) {
+                    msg = "ELRS Telemetry " + Updater.installedVersion(this) + " is the latest version";
+                }
+            } catch (Exception e) {
+                if (manual) msg = "Could not check for updates: " + e.getMessage();
+            } finally {
+                updateChecking = false;
+            }
+            if (msg != null) {
+                String m = msg;
+                ui.post(() -> Toast.makeText(this, m, Toast.LENGTH_LONG).show());
+            }
+        }, "update-check").start();
+    }
+
+    private void showUpdateDialog(Updater.Release r) {
+        if (isFinishing()) return;
+        updateDialogShown = true;
+        String notes = r.notes.replaceAll("[*#`]", "").trim();
+        if (notes.length() > 700) notes = notes.substring(0, 700) + "…";
+        new AlertDialog.Builder(this)
+                .setTitle("Update available: " + r.tag)
+                .setMessage("Installed: " + Updater.installedVersion(this) + "\n\n" + notes)
+                .setPositiveButton("Update", (d, w) -> startUpdate(r))
+                .setNeutralButton("Skip this version", (d, w) ->
+                        prefs.edit().putString("updateSkipped", r.version).apply())
+                .setNegativeButton("Later", null)
+                .setOnDismissListener(d -> updateDialogShown = false)
+                .show();
+    }
+
+    private void startUpdate(Updater.Release r) {
+        if (!Updater.canInstall(this)) {
+            // one-time Android permission: "Install unknown apps" for this app; continues in onResume
+            awaitingInstallPermission = r;
+            Toast.makeText(this, "Allow \"Install unknown apps\" for ELRS Telemetry, then go back", Toast.LENGTH_LONG).show();
+            try {
+                startActivity(Updater.allowInstallIntent(this));
+            } catch (Exception e) {
+                awaitingInstallPermission = null;
+                Toast.makeText(this, "Open Android Settings › Apps › ELRS Telemetry › Install unknown apps",
+                        Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
+        TextView progress = new TextView(this);
+        progress.setPadding(dp(24), dp(16), dp(24), dp(8));
+        progress.setTextSize(15);
+        progress.setText("Downloading " + r.tag + "…");
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setTitle("Updating ELRS Telemetry")
+                .setView(progress)
+                .setCancelable(false)
+                .show();
+        Updater.downloadAndInstall(this, r,
+                (done, total) -> ui.post(() -> progress.setText(total > 0
+                        ? String.format(Locale.US, "Downloading %s… %d%%", r.tag, done * 100 / total)
+                        : String.format(Locale.US, "Downloading %s… %.1f MB", r.tag, done / 1048576.0))),
+                error -> ui.post(() -> {
+                    if (dlg.isShowing()) dlg.dismiss();
+                    if (error != null) Toast.makeText(this, error, Toast.LENGTH_LONG).show();
+                }));
+    }
+
+    @Override
+    public String appVersion() {
+        return Updater.installedVersion(this);
+    }
+
+    @Override
+    public void checkForUpdatesNow() {
+        if (!router.hasInternet()) {
+            Toast.makeText(this, "No internet — connect to a network with internet (not the radio's WiFi)",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        Toast.makeText(this, "Checking for updates…", Toast.LENGTH_SHORT).show();
+        checkForUpdate(true);
     }
 
     /** WiFi drops and telemetry pauses since start, to tell a WiFi problem from a telemetry problem. */

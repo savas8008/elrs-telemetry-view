@@ -52,6 +52,12 @@ public class SettingsDialog {
         /** Opens the offline map planner (choose an area on the map and download it). */
         void openOfflineMapPlanner();
 
+        /** Installed version name. */
+        String appVersion();
+
+        /** Checks GitHub for a newer release now and offers it. */
+        void checkForUpdatesNow();
+
         /** Current offline download status, or empty. */
         String downloadStatus();
     }
@@ -130,6 +136,7 @@ public class SettingsDialog {
         buildAlerts(right);
         buildVideo(right);
         buildConnection(right);
+        buildUpdates(right);
 
         dialog.setContentView(root);
         Window w = dialog.getWindow();
@@ -274,6 +281,16 @@ public class SettingsDialog {
         });
     }
 
+    private void buildUpdates(LinearLayout col) {
+        LinearLayout card = card(col, "UPDATES");
+        hint(card, "Installed version: " + host.appVersion() + ". New versions are published on GitHub "
+                + "(github.com/" + Updater.REPO + "). The app checks when internet is available and asks before "
+                + "installing — never during a flight.");
+        Switch auto = sw(card, "Check for updates automatically", s.checkUpdates);
+        savers.add(() -> s.checkUpdates = auto.isChecked());
+        card.addView(button("Check now", false, v -> host.checkForUpdatesNow()));
+    }
+
     private void buildVideo(LinearLayout col) {
         LinearLayout card = card(col, "GOGGLES VIDEO (USB)");
         hint(card, "Connect DJI Goggles N3 to this device with a USB-C data cable while the goggles are linked to "
@@ -293,7 +310,7 @@ public class SettingsDialog {
         card.addView(label("Display"));
         RadioGroup mode = radio(card, new String[]{
                 "Hidden",
-                "Floating panel — drag to move, drag the ◢ corner to resize",
+                "Floating panel — drag to move, pinch or drag the ◢ corner to resize",
                 "Replace the map — video fills the screen, telemetry on top"}, s.videoMode, false);
         card.addView(label("Panel size"));
         final int[] preset = {-1};

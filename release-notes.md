@@ -1,4 +1,4 @@
-**Download `ELRS-Telemetry-v1.0.apk` below and install it on your Android phone or tablet (Android 10+).**
+**Download the `ELRS-Telemetry-v….apk` file below and install it on your Android phone or tablet (Android 10+).**
 
 Ground station for ExpressLRS telemetry: the radio's TX Backpack (firmware 1.5.8+, *Telemetry = WiFi*)
 sends the telemetry over WiFi; DJI Goggles N3 video comes in over USB-C. See the
@@ -8,6 +8,12 @@ sends the telemetry over WiFi; DJI Goggles N3 video comes in over USB-C. See the
 Earlier test builds were signed with a temporary key. **Uninstall the old app once** before installing
 this version (Android shows "App not installed" otherwise). From this version on, new releases
 install as normal updates and keep your settings.
+
+### New in 1.1
+- **In-app updates**: the app checks GitHub for new versions when internet is available and offers
+  to install them (never during a flight). Android asks once to allow "Install unknown apps" for
+  ELRS Telemetry. ⚙ Settings › Updates › *Check now* checks manually.
+- Install 1.1 manually once; later versions can be installed from inside the app.
 
 ### Highlights
 - Live map with aircraft, track and home; attitude, altitude, speed, battery and link panels
