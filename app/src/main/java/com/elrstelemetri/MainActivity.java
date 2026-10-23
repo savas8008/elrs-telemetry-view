@@ -113,6 +113,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
     // Offline map planner: full-screen area chooser over the map (usable without telemetry)
     private OfflineMapPlanner planner;
     private boolean planning;
+    private boolean followBeforePlanning = true;  // the planner turns follow off; restored when it closes
 
     // In-app updates (GitHub releases)
     private static final long UPDATE_CHECK_EVERY_MS = 6 * 3600 * 1000L;
@@ -975,12 +976,14 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
 
     @Override
     public void openOfflineMapPlanner() {
+        if (!planning) followBeforePlanning = map.isFollowing();
         planning = true;
         applyScreen();
     }
 
     @Override
     public void closePlanner() {
+        if (planning) map.setFollow(followBeforePlanning);
         planning = false;
         applyScreen();
     }

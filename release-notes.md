@@ -9,6 +9,10 @@ Earlier test builds were signed with a temporary key. **Uninstall the old app on
 this version (Android shows "App not installed" otherwise). From this version on, new releases
 install as normal updates and keep your settings.
 
+### New in 1.4
+- Fix: after using the offline map screen, the map did not follow the aircraft any more until the
+  follow button was pressed. Follow mode is now restored when the offline map screen is closed.
+
 ### New in 1.3
 - Offline maps: the panel shows how much of the framed area is already downloaded. Downloading again
   fetches only the missing tiles (**Download missing**); earlier downloads are never deleted.
