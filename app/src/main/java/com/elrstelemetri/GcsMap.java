@@ -251,7 +251,33 @@ public class GcsMap {
         }
     }
 
-    /** Downloads {@code area} for offline use. Returns an error message or null. */
+    /**
+     * Prepares a cache checker for the current layer. Create it on the UI thread, then call
+     * {@link #countCachedTiles} on a background thread.
+     */
+    public CacheManager newCacheChecker() {
+        return new CacheManager(view);
+    }
+
+    /**
+     * Counts how many tiles of {@code area} (zoom {@link #OFFLINE_MIN_ZOOM}..maxZoom) are already in the
+     * offline cache. Blocking (one database lookup per tile); returns -1 if {@code cancelled} turns true.
+     */
+    public static int countCachedTiles(CacheManager checker, BoundingBox area, int maxZoom,
+                                       java.util.function.BooleanSupplier cancelled) {
+        int cached = 0;
+        for (long tile : CacheManager.getTilesCoverage(area, Math.min(OFFLINE_MIN_ZOOM, maxZoom), maxZoom)) {
+            if (cancelled.getAsBoolean()) return -1;
+            if (checker.checkTile(tile)) cached++;
+        }
+        return cached;
+    }
+
+    /**
+     * Downloads {@code area} for offline use. Tiles already in the cache are skipped (osmdroid's
+     * CacheManager.loadTile checks the cache first), so downloading an area again only fetches what
+     * is missing; nothing that was downloaded before is deleted. Returns an error message or null.
+     */
     public String downloadArea(BoundingBox area, int maxZoom, CacheManager.CacheManagerCallback cb) {
         try {
             downloader = new CacheManager(view);

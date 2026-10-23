@@ -928,7 +928,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
 
             @Override
             public void updateProgress(int progress, int zoom, int zoomMin, int zoomMax) {
-                downloadStatus = String.format(Locale.US, "Offline map: %d / %d tiles (zoom %d of %d–%d)",
+                downloadStatus = String.format(Locale.US, "Offline map: %d / %d tiles checked, already downloaded ones are skipped (zoom %d of %d–%d)",
                         progress, total, zoom, zoomMin, zoomMax);
             }
 

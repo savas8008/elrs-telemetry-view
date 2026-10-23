@@ -68,6 +68,7 @@ public final class OfflineMapPlanner extends LinearLayout {
     private static final int C_TEXT = Color.rgb(235, 238, 242);
     private static final int C_LABEL = Color.rgb(140, 150, 165);
     private static final int C_ACCENT = Color.rgb(0, 200, 255);
+    private static final int C_OK = Color.rgb(60, 210, 110);
     private static final int C_WARN = Color.rgb(255, 170, 0);
     private static final int C_BUTTON = Color.rgb(0, 130, 190);
     private static final int C_BUTTON2 = Color.rgb(55, 60, 72);
@@ -85,6 +86,14 @@ public final class OfflineMapPlanner extends LinearLayout {
     private final TextView download;
     private final LinearLayout layerChips, zoomChips;
     private int lastTiles = -1;
+
+    // Tiles of the framed area that are already downloaded, counted in the background
+    private String cacheKey = "";        // area + detail + layer the count belongs to
+    private String pendingKey = "";
+    private long pendingSince;
+    private volatile int countGen;       // bumps cancel a running count
+    private int cachedTiles = -1;        // -1 = not known yet
+    private boolean wasDownloading;
 
     public OfflineMapPlanner(Context c, Host host) {
         super(c);
@@ -232,32 +241,98 @@ public final class OfflineMapPlanner extends LinearLayout {
     private void updateStatus() {
         BoundingBox area = selectedArea();
         lastTiles = area == null ? -1 : host.map().tilesForArea(area, maxZoom());
-        String size = lastTiles < 0 ? "?" : String.format(Locale.US, "%,d tiles ≈ %.0f MB", lastTiles,
-                lastTiles * (double) GcsMap.APPROX_TILE_KB / 1024);
-        String line = "Framed area, zoom " + Math.min(GcsMap.OFFLINE_MIN_ZOOM, maxZoom()) + "–" + maxZoom() + ": " + size;
+        refreshCacheCount(area);
+        boolean tooLarge = lastTiles > GcsMap.MAX_DOWNLOAD_TILES;
+        boolean known = cachedTiles >= 0 && lastTiles >= 0;
+        int missing = known ? Math.max(0, lastTiles - cachedTiles) : lastTiles;
+        String zoom = "zoom " + Math.min(GcsMap.OFFLINE_MIN_ZOOM, maxZoom()) + "–" + maxZoom();
+        String line;
         int color = C_TEXT;
-        if (lastTiles > GcsMap.MAX_DOWNLOAD_TILES) {
-            line += "  ·  too large: zoom in or lower the detail";
+        if (lastTiles < 0) {
+            line = "Framed area: tile count unavailable";
+        } else if (tooLarge) {
+            line = String.format(Locale.US, "Framed area, %s: %,d tiles  ·  too large: zoom in or lower the detail",
+                    zoom, lastTiles);
             color = C_WARN;
+        } else if (!known) {
+            line = String.format(Locale.US, "Framed area, %s: %,d tiles ≈ %s  ·  checking what is already downloaded…",
+                    zoom, lastTiles, mb(lastTiles));
+        } else if (missing == 0) {
+            line = String.format(Locale.US, "✓ Framed area is already downloaded (%,d tiles, %s)", lastTiles, zoom);
+            color = C_OK;
+        } else if (cachedTiles > 0) {
+            line = String.format(Locale.US, "Framed area, %s: %,d of %,d tiles already downloaded — %,d missing ≈ %s",
+                    zoom, cachedTiles, lastTiles, missing, mb(missing));
+        } else {
+            line = String.format(Locale.US, "Framed area, %s: %,d tiles ≈ %s, none downloaded yet",
+                    zoom, lastTiles, mb(lastTiles));
         }
         String st = host.downloadStatus();
-        if (host.isDownloading()) {
+        boolean downloading = host.isDownloading();
+        if (downloading) {
             line = st;
             color = C_ACCENT;
-        } else if (!host.hasInternet()) {
+        } else if (!host.hasInternet() && missing != 0) {
             line = "No internet — connect to a WiFi with internet (not the radio's) or enable mobile data";
             color = C_WARN;
-        } else if (!st.isEmpty()) {
+        } else if (!st.isEmpty() && missing != 0) {
             line += "\n" + st;
         }
         status.setText(line);
         status.setTextColor(color);
-        download.setAlpha(host.isDownloading() || lastTiles > GcsMap.MAX_DOWNLOAD_TILES ? 0.45f : 1f);
+        download.setText(known && missing == 0 ? "Downloaded ✓" : known && cachedTiles > 0 ? "Download missing" : "Download area");
+        download.setAlpha(downloading || tooLarge || (known && missing == 0) ? 0.45f : 1f);
+        // a finished download changes the cache: count again
+        if (wasDownloading && !downloading) cacheKey = "";
+        wasDownloading = downloading;
+    }
+
+    private static String mb(int tiles) {
+        return String.format(Locale.US, "%.0f MB", Math.max(1, tiles * (double) GcsMap.APPROX_TILE_KB / 1024));
+    }
+
+    /** Recounts the downloaded tiles once the framed area has stopped changing for a moment. */
+    private void refreshCacheCount(BoundingBox area) {
+        if (area == null || lastTiles < 0 || lastTiles > GcsMap.MAX_DOWNLOAD_TILES) {
+            countGen++;
+            cachedTiles = -1;
+            cacheKey = "";
+            return;
+        }
+        String key = String.format(Locale.US, "%.5f,%.5f,%.5f,%.5f,%d,%d", area.getLatNorth(), area.getLonEast(),
+                area.getLatSouth(), area.getLonWest(), maxZoom(), host.settings().mapType);
+        if (key.equals(cacheKey)) return;
+        long now = System.currentTimeMillis();
+        if (!key.equals(pendingKey)) {
+            pendingKey = key;
+            pendingSince = now;
+            cachedTiles = -1;
+            countGen++;  // the area moved: drop a count in progress
+            return;
+        }
+        if (now - pendingSince < 600) return;
+        cacheKey = key;
+        final int gen = ++countGen;
+        final int zoom = maxZoom();
+        final org.osmdroid.tileprovider.cachemanager.CacheManager checker = host.map().newCacheChecker();
+        new Thread(() -> {
+            int n = GcsMap.countCachedTiles(checker, area, zoom, () -> gen != countGen);
+            if (n >= 0) ui.post(() -> {
+                if (gen == countGen) {
+                    cachedTiles = n;
+                    updateStatus();
+                }
+            });
+        }, "cache-count").start();
     }
 
     private void startDownload() {
         BoundingBox area = selectedArea();
         if (area == null) return;
+        if (cachedTiles >= 0 && lastTiles >= 0 && cachedTiles >= lastTiles && !host.isDownloading()) {
+            Toast.makeText(getContext(), "This area is already downloaded at this detail level", Toast.LENGTH_SHORT).show();
+            return;
+        }
         String err = host.startOfflineDownload(area, maxZoom());
         if (err != null) Toast.makeText(getContext(), err, Toast.LENGTH_LONG).show();
         updateStatus();

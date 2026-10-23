@@ -71,12 +71,19 @@ No radio or goggles are needed for this — do it at home before the flight:
 5. Tap **Download area**. Progress is shown in the panel; you can leave with **Done** and the
    download continues. Repeat for other fields — every downloaded area stays in the cache.
 
+Downloads only add to the cache: nothing downloaded before is deleted, and tiles that are already
+on the device are skipped. The panel shows how much of the framed area is already downloaded
+("1,200 of 5,000 tiles already downloaded — 3,800 missing"); the button then reads **Download missing**,
+or **Downloaded ✓** when the area is complete. So you can enlarge an area, add a neighbouring field
+or raise the detail level and only the missing tiles are fetched.
+
 Each download also includes the zoom levels from 8 upward, so a zoomed-out overview of the
 area is available offline too.
 
 Notes:
 - Downloads are limited to 30,000 tiles per area; zoom in or lower the detail level for larger areas.
-- The cache holds up to 2 GB and is kept for a year. Delete it via Android Settings › Apps ›
+- The cache holds up to 2 GB and is kept for a year. Only when it grows beyond 2 GB are the oldest
+  tiles removed to make room. Delete it via Android Settings › Apps ›
   ELRS Telemetry › Storage › Clear storage.
 - Satellite, Topographic and Street (Esri) can be downloaded. The **OpenStreetMap** layer is
   **online only** because the OpenStreetMap tile policy forbids bulk downloads.
