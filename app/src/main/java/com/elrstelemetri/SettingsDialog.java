@@ -319,10 +319,11 @@ public class SettingsDialog {
         card.addView(label("Display"));
         RadioGroup mode = radio(card, new String[]{
                 "Hidden",
-                "Video 30 % · map 70 % — side by side, never overlapping",
-                "Video 70 % · map 30 %"}, s.videoMode, false);
-        hint(card, "The enlarge/shrink button on the video swaps the two sizes. The telemetry panel is hidden "
-                + "when the goggles connect; the telemetry button slides it in from the left.");
+                "Next to the map while the goggles are connected"}, s.videoMode, false);
+        hint(card, "The video opens by itself when the goggles connect; without goggles video the map fills the "
+                + "screen. Drag the bar between map and video to choose how much of the screen each one gets "
+                + "(remembered). The telemetry panel is hidden when the goggles connect; the telemetry button "
+                + "slides it in from the left.");
 
         Switch keep = sw(card, "Keep running in the background", s.keepRunning);
         hint(card, "Keeps video, telemetry, spoken alarms and logging running while the screen is off or another "
@@ -330,7 +331,6 @@ public class SettingsDialog {
         savers.add(() -> {
             s.keepRunning = keep.isChecked();
             s.videoMode = checkedIndex(mode, s.videoMode);
-            if (s.videoMode != Settings.VIDEO_OFF) s.videoShownMode = s.videoMode;
         });
     }
 

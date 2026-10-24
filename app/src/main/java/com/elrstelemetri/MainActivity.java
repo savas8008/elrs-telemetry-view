@@ -17,6 +17,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
@@ -56,6 +57,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
     private static final int C_STALE = Color.rgb(95, 100, 110);
     private static final int C_PANEL = Color.argb(200, 12, 15, 20);
     private static final int PANEL_WIDTH_DP = 220;
+    private static final int DIVIDER_DP = 16;
 
     private final TelemetryState state = new TelemetryState();
     private final CrsfParser parser = new CrsfParser(state);
@@ -97,6 +99,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
     private View bVideo;
     private VideoPanel videoPanel;
     private VideoWindow videoWindow;
+    private View divider;
     private FrameLayout gcsRoot;
 
     // Derived values (UI thread)
@@ -140,7 +143,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         prefs = getSharedPreferences("settings", MODE_PRIVATE);
         settings.load(prefs);
-        // Goggles video starts closed; the goggles button reopens it in the last used mode (videoShownMode)
+        // Goggles video starts closed; it opens by itself when the goggles connect (onStreamStarted)
         if (settings.videoMode != Settings.VIDEO_OFF) {
             settings.videoMode = Settings.VIDEO_OFF;
             settings.save(prefs);
@@ -176,9 +179,10 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
                     settings.save(prefs);
                     applyPanelVisibility(true);
                 }
-                Toast.makeText(MainActivity.this, settings.videoMode == Settings.VIDEO_OFF
-                        ? "Goggles video connected — tap the goggles button to show it" : "Goggles video connected",
-                        Toast.LENGTH_SHORT).show();
+                // split the screen with the map; without goggles video the map has the whole screen
+                if (settings.videoMode == Settings.VIDEO_OFF) setVideoMode(Settings.VIDEO_ON);
+                else applyVideoMode();
+                Toast.makeText(MainActivity.this, "Goggles video connected", Toast.LENGTH_SHORT).show();
             }
 
             @Override
@@ -197,23 +201,15 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
                 n3Sps = null;
                 n3Pps = null;
                 videoPanel.onDisconnected(reason);
-                ui.post(() -> Toast.makeText(MainActivity.this, "Goggles video ended: " + reason,
-                        Toast.LENGTH_SHORT).show());
+                ui.post(() -> {
+                    applyVideoMode();  // map back to full screen
+                    Toast.makeText(MainActivity.this, "Goggles video ended: " + reason, Toast.LENGTH_SHORT).show();
+                });
             }
         });
         launchIntent = getIntent();
         videoWindow = new VideoWindow(this, videoPanel);
-        videoWindow.setListener(new VideoWindow.Listener() {
-            @Override
-            public void onToggleSize() {
-                setVideoMode(settings.videoMode == Settings.VIDEO_LARGE ? Settings.VIDEO_SMALL : Settings.VIDEO_LARGE);
-            }
-
-            @Override
-            public void onClose() {
-                setVideoMode(Settings.VIDEO_OFF);
-            }
-        });
+        videoWindow.setListener(() -> setVideoMode(Settings.VIDEO_OFF));
         setContentView(buildUi());
         hideSystemBars();
         if (Build.VERSION.SDK_INT >= 33
@@ -421,30 +417,40 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
 
     void setVideoMode(int mode) {
         settings.videoMode = mode;
-        if (mode != Settings.VIDEO_OFF) settings.videoShownMode = mode;
         settings.save(prefs);
         applyVideoMode();
     }
 
+    /** Screenshot test only: lay out as if the goggles were streaming. */
+    boolean videoLinkForScreenshots;
+
+    /** Video next to the map: switched on, GCS on screen and the goggles streaming. Otherwise the map fills the screen. */
+    private boolean videoShown() {
+        return settings.videoMode != Settings.VIDEO_OFF && gcsShown() && (n3.isStreaming() || videoLinkForScreenshots);
+    }
+
     private void applyVideoMode() {
-        boolean show = settings.videoMode != Settings.VIDEO_OFF && gcsShown();
+        boolean show = videoShown();
         videoWindow.setVisibility(show ? View.VISIBLE : View.GONE);
-        videoWindow.setLarge(settings.videoMode == Settings.VIDEO_LARGE);
+        divider.setVisibility(show ? View.VISIBLE : View.GONE);
         if (bVideo != null) {
-            ((GradientDrawable) bVideo.getBackground()).setColor(show ? Color.argb(220, 0, 140, 200) : C_PANEL);
+            boolean on = settings.videoMode != Settings.VIDEO_OFF;
+            ((GradientDrawable) bVideo.getBackground()).setColor(on ? Color.argb(220, 0, 140, 200) : C_PANEL);
         }
         applyLayout();
     }
 
-    /** Places map and video side by side (30/70 or 70/30, never overlapping) and the alarm banner over the map. */
+    /** Places map, divider and video side by side (never overlapping) and the alarm banner over the map. */
     private void applyLayout() {
         int pw = gcsRoot.getWidth(), ph = gcsRoot.getHeight();
         if (pw == 0 || ph == 0) return;   // the root's layout listener calls again once laid out
-        boolean show = settings.videoMode != Settings.VIDEO_OFF && gcsShown();
-        SplitLayout l = SplitLayout.compute(pw, ph, show, settings.videoMode == Settings.VIDEO_LARGE,
+        SplitLayout l = SplitLayout.compute(pw, ph, videoShown(), settings.videoFraction, dp(DIVIDER_DP),
                 dp(56), dp(58));
         place(map.view, l.map);
-        if (l.video != null) place(videoWindow, l.video);
+        if (l.video != null) {
+            place(videoWindow, l.video);
+            place(divider, l.divider);
+        }
 
         // banner: centred over the map, clear of the telemetry panel when there is room
         int left = l.map[0] + dp(8);
@@ -457,6 +463,39 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
             wlp.rightMargin = right;
             tWarn.setLayoutParams(wlp);
         }
+    }
+
+    /** Bar between map and video: drag it sideways to share the screen; the position is remembered. */
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    private View buildDivider() {
+        FrameLayout d = new FrameLayout(this);
+        d.setBackgroundColor(Color.rgb(20, 24, 30));
+        View grip = new View(this);
+        grip.setBackground(roundBg(Color.rgb(150, 160, 175), 3));
+        d.addView(grip, new FrameLayout.LayoutParams(dp(5), dp(48), Gravity.CENTER));
+        d.setOnTouchListener((v, e) -> {
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    v.getParent().requestDisallowInterceptTouchEvent(true);
+                    grip.setBackground(roundBg(C_ACCENT, 3));
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    int[] at = new int[2];
+                    gcsRoot.getLocationOnScreen(at);
+                    settings.videoFraction = SplitLayout.fractionAt(gcsRoot.getWidth(), e.getRawX() - at[0],
+                            dp(DIVIDER_DP));
+                    applyLayout();
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    grip.setBackground(roundBg(Color.rgb(150, 160, 175), 3));
+                    settings.save(prefs);
+                    return true;
+                default:
+                    return true;
+            }
+        });
+        return d;
     }
 
     private static void place(View v, int[] r) {
@@ -1116,6 +1155,8 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         root.addView(map.view, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         root.addView(videoWindow, new FrameLayout.LayoutParams(0, 0));
+        divider = buildDivider();
+        root.addView(divider, new FrameLayout.LayoutParams(0, 0));
         gcsRoot = root;
         root.addOnLayoutChangeListener((v, l, t, rr, b, ol, ot, orr, ob) -> {
             if (rr - l != orr - ol || b - t != ob - ot) v.post(this::applyLayout);
@@ -1259,13 +1300,15 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
             map.clearTrack();
             Toast.makeText(this, "Track cleared", Toast.LENGTH_SHORT).show();
         });
-        // goggles = video panel on/off (fullscreen/PiP and close are on the video itself)
+        // goggles = video next to the map on/off (shown while the goggles stream; ✕ is on the video itself)
         bVideo = mapButton(buttons, R.drawable.ic_goggles, v -> {
             boolean on = settings.videoMode == Settings.VIDEO_OFF;
-            int shown = settings.videoShownMode == Settings.VIDEO_OFF ? Settings.VIDEO_SMALL : settings.videoShownMode;
-            setVideoMode(on ? shown : Settings.VIDEO_OFF);
-            if (on && !n3.isStreaming() && !n3.accessoryPresent()) {
-                Toast.makeText(this, "Connect the goggles with a USB-C cable", Toast.LENGTH_SHORT).show();
+            setVideoMode(on ? Settings.VIDEO_ON : Settings.VIDEO_OFF);
+            if (on && !n3.isStreaming()) {
+                Toast.makeText(this, n3.accessoryPresent() ? "Connecting to the goggles…"
+                        : "Connect the goggles with a USB-C cable — the video opens next to the map",
+                        Toast.LENGTH_LONG).show();
+                if (n3.accessoryPresent()) n3.reconnect();
             }
         });
         // telemetry panel: slides in from the left / back out

@@ -35,7 +35,8 @@ radio's telemetry **on a map**. No MAVLink needed: it reads the CRSF telemetry t
 - **Altitude and voltage charts** (last 5 minutes)
 - **Configurable alarms** with on-screen banner, voice and vibration (see [Alarms](#alarms))
 - **Live goggles video straight from DJI Goggles N3 over USB** — no DJI Fly needed — side by side with the
-  map, 30/70 or 70/30, never overlapping (see [Goggles video](#goggles-video-dji-goggles-n3-over-usb))
+  map at the ratio you choose, never overlapping; without goggles video the map fills the screen
+  (see [Goggles video](#goggles-video-dji-goggles-n3-over-usb))
 - **Flight log (CSV)**: on by default, starts automatically when telemetry arrives
 - **Flight summary**: duration, max altitude, max distance, max speed/current, min cell voltage
 - Landscape, full screen, screen stays on
@@ -96,24 +97,23 @@ Notes:
 The app shows the live video directly from **DJI Goggles N3** over a USB-C cable — no DJI Fly, no
 network streaming.
 
-1. Tap the **goggles** button in the bottom bar. The video panel opens.
-2. If the goggles are not connected yet, the panel says so and offers **Connect**:
+1. Connect the goggles; the video opens by itself next to the map. Without goggles video the map
+   fills the whole screen.
+2. To connect:
    - Turn on the goggles and link them to the aircraft (live view on the goggles).
    - Connect the goggles to this phone/tablet with a **USB-C data cable** (not charge-only).
    - When Android asks which app to open for the DJI accessory, choose **ELRS Telemetry**
      (tick "always" to skip the question next time). If the app is already open it connects automatically.
-   - Tapping **Connect** without goggles attached explains these steps.
-3. The video appears on the right and the screen is split automatically — the video and the map never
-   overlap, and the aircraft stays in the middle of the visible map:
-   - **Video 30 % · map 70 %** (default)
-   - **Video 70 % · map 30 %**
+3. The video appears on the right, the map on the left; they never overlap and the aircraft stays in the
+   middle of the visible map. **Drag the bar between them** sideways to choose how much of the screen
+   each one gets (15–85 %, default video 30 %). The position is remembered.
 4. When the goggles connect, the telemetry panel is hidden (the goggles' OSD already shows the
    telemetry). The **telemetry** button slides it back in from the left.
 
 Controls:
-- The video is **closed when the app starts**. The **goggles** button in the bottom bar opens/closes it
-  (blue = open) and reopens it at the size last used.
-- Top-right of the video: **enlarge / shrink** swaps the 30 % / 70 % split, **✕** = close.
+- The **goggles** button in the bottom bar switches the video on/off (blue = on). While it is on, the
+  video is shown whenever the goggles stream; when the stream ends the map takes the whole screen again.
+- Top-right of the video: **✕** = close.
 
 Telemetry still comes from the backpack WiFi, so one device does everything: WiFi for telemetry,
 USB for video.
@@ -140,7 +140,7 @@ USB for video.
 |---|---|
 | Top bar | Flight mode, arm state, flight time, LQ, RSSI, satellites, logging state (tap to toggle), source IP, packet rate, map source |
 | Telemetry panel (left, scrolls) | Artificial horizon + compass, altitude, vario, ground speed, home distance, direction to home (arrow relative to the nose), GPS altitude; battery gauge, cell voltage, current, consumed mAh, power; SNR, TX power, downlink, antenna/RF; altitude and voltage charts; coordinates, log file, download and video status |
-| Right (when open) | Goggles video, 30 % or 70 % of the width |
+| Right (while the goggles stream) | Goggles video; drag the bar between map and video to resize |
 | Top centre | Alarms (red) and notices — **tap to mute alarms for 2 minutes** |
 | Bottom | Buttons |
 
@@ -205,7 +205,7 @@ permission needed). Open them with a file manager or import them into a spreadsh
 | Vibrate on alarm | on |
 | Alarm repeat interval | 15 s |
 | UDP port | 14550 |
-| Goggles video | video 30 % · map 70 % |
+| Goggles video | opens when the goggles connect, 30 % of the width |
 | Keep running in the background | on |
 
 **Settings → Show raw UDP data** shows incoming packets for troubleshooting.

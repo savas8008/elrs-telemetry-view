@@ -10,9 +10,9 @@ this version (Android shows "App not installed" otherwise). From this version on
 install as normal updates and keep your settings.
 
 ### New in 1.5
-- **Video and map side by side**: the goggles video takes 30 % or 70 % of the width and the map the rest,
-  so they never overlap and the aircraft stays in the middle of the visible map. The button on the video
-  swaps the sizes.
+- **Video and map side by side**: they never overlap and the aircraft stays in the middle of the visible
+  map. Drag the bar between them to choose the ratio (remembered). The video opens by itself when the
+  goggles connect; without goggles video the map fills the whole screen.
 - **One telemetry panel** on the left instead of two; it is hidden when the goggles connect (the goggles'
   OSD shows the telemetry) and the telemetry button slides it in from the left.
 - Fix: the "Receiving MAVLink — set Link Mode = Normal" notice appeared during flights although CRSF

@@ -9,21 +9,16 @@ import android.widget.FrameLayout;
 
 /**
  * Container for the video in the split screen (see {@link SplitLayout}): the video fills it, letterboxed.
- * Buttons on the window: enlarge/shrink switches the video between 30 % and 70 % of the screen width
- * (the map takes the rest), ✕ hides the video.
+ * The split is set by dragging the divider next to it; ✕ hides the video.
  */
 public final class VideoWindow extends FrameLayout {
 
     public interface Listener {
-        /** Enlarge / shrink pressed: swap the 30 % / 70 % split between video and map. */
-        void onToggleSize();
-
         /** ✕ pressed: hide the video. */
         void onClose();
     }
 
     public final VideoPanel video;
-    private final android.widget.ImageView sizeButton;
     private Listener listener;
 
     public VideoWindow(Context c, VideoPanel video) {
@@ -34,10 +29,6 @@ public final class VideoWindow extends FrameLayout {
 
         android.widget.LinearLayout controls = new android.widget.LinearLayout(c);
         controls.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-        sizeButton = controlButton(c, R.drawable.ic_fullscreen, () -> {
-            if (listener != null) listener.onToggleSize();
-        });
-        controls.addView(sizeButton);
         controls.addView(controlButton(c, R.drawable.ic_close, () -> {
             if (listener != null) listener.onClose();
         }));
@@ -65,10 +56,5 @@ public final class VideoWindow extends FrameLayout {
 
     public void setListener(Listener l) {
         listener = l;
-    }
-
-    /** Large = 70 % of the width (button shrinks it), otherwise 30 % (button enlarges it). */
-    public void setLarge(boolean large) {
-        sizeButton.setImageResource(large ? R.drawable.ic_pip : R.drawable.ic_fullscreen);
     }
 }

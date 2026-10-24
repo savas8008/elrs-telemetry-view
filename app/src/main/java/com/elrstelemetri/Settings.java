@@ -22,11 +22,10 @@ public class Settings {
     public int offlineMaxZoom = 17;       // detail level for offline map downloads
 
     public static final int VIDEO_OFF = 0;
-    public static final int VIDEO_SMALL = 1;   // split screen: video 30 %, map 70 %
-    public static final int VIDEO_LARGE = 2;   // split screen: video 70 %, map 30 %
-    public static final String[] VIDEO_MODE_NAMES = {"Hidden", "Video 30 % · map 70 %", "Video 70 % · map 30 %"};
-    public int videoMode = VIDEO_OFF;     // the app always starts with the video closed (see MainActivity)
-    public int videoShownMode = VIDEO_SMALL;  // mode restored when the video is switched back on
+    public static final int VIDEO_ON = 1;      // split screen next to the map while the goggles stream
+    public int videoMode = VIDEO_OFF;     // starts closed; opens by itself when the goggles connect (see MainActivity)
+    /** Video share of the screen width, set by dragging the divider (see SplitLayout). */
+    public float videoFraction = SplitLayout.DEFAULT;
     public boolean keepRunning = true;        // foreground service: keep working while another app is open
     public boolean checkUpdates = true;       // look for a new GitHub release when internet is available
 
@@ -46,8 +45,8 @@ public class Settings {
         alarmRepeatSec = p.getInt("alarmRepeatSec", alarmRepeatSec);
         showPanels = p.getBoolean("showPanels", showPanels);
         offlineMaxZoom = p.getInt("offlineMaxZoom", offlineMaxZoom);
-        videoMode = p.getInt("videoMode", videoMode);
-        videoShownMode = p.getInt("videoShownMode", videoShownMode);
+        videoMode = p.getInt("videoMode", videoMode) != VIDEO_OFF ? VIDEO_ON : VIDEO_OFF;
+        videoFraction = SplitLayout.clamp(p.getFloat("videoFraction", videoFraction));
         keepRunning = p.getBoolean("keepRunning", keepRunning);
         checkUpdates = p.getBoolean("checkUpdates", checkUpdates);
         hasLastPos = p.getBoolean("hasLastPos", false);
@@ -72,7 +71,7 @@ public class Settings {
                 .putBoolean("showPanels", showPanels)
                 .putInt("offlineMaxZoom", offlineMaxZoom)
                 .putInt("videoMode", videoMode)
-                .putInt("videoShownMode", videoShownMode)
+                .putFloat("videoFraction", videoFraction)
                 .putBoolean("keepRunning", keepRunning)
                 .putBoolean("checkUpdates", checkUpdates)
                 .putBoolean("hasLastPos", hasLastPos)
