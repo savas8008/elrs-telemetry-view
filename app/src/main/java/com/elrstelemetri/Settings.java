@@ -22,19 +22,13 @@ public class Settings {
     public int offlineMaxZoom = 17;       // detail level for offline map downloads
 
     public static final int VIDEO_OFF = 0;
-    public static final int VIDEO_PANEL = 1;       // floating, movable, resizable panel
-    public static final int VIDEO_REPLACE_MAP = 2; // video fills the screen instead of the map
-    public static final String[] VIDEO_MODE_NAMES = {"Hidden", "Floating panel", "Replace the map"};
+    public static final int VIDEO_SMALL = 1;   // split screen: video 30 %, map 70 %
+    public static final int VIDEO_LARGE = 2;   // split screen: video 70 %, map 30 %
+    public static final String[] VIDEO_MODE_NAMES = {"Hidden", "Video 30 % · map 70 %", "Video 70 % · map 30 %"};
     public int videoMode = VIDEO_OFF;     // the app always starts with the video closed (see MainActivity)
-    public int videoShownMode = VIDEO_PANEL;  // mode restored when the video is switched back on
+    public int videoShownMode = VIDEO_SMALL;  // mode restored when the video is switched back on
     public boolean keepRunning = true;        // foreground service: keep working while another app is open
     public boolean checkUpdates = true;       // look for a new GitHub release when internet is available
-    /** Floating panel geometry as fractions of the screen; negative = default. */
-    public float videoX = -1, videoY = -1, videoW = -1, videoH = -1;
-
-    /** Panel size presets in dp (16:9). */
-    public static final int[][] VIDEO_PRESETS = {{240, 135}, {320, 180}, {480, 270}};
-    public static final String[] VIDEO_PRESET_NAMES = {"Small", "Medium", "Large"};
 
     public final AlarmSet alarms = new AlarmSet();
 
@@ -56,10 +50,6 @@ public class Settings {
         videoShownMode = p.getInt("videoShownMode", videoShownMode);
         keepRunning = p.getBoolean("keepRunning", keepRunning);
         checkUpdates = p.getBoolean("checkUpdates", checkUpdates);
-        videoX = p.getFloat("videoX", -1);
-        videoY = p.getFloat("videoY", -1);
-        videoW = p.getFloat("videoW", -1);
-        videoH = p.getFloat("videoH", -1);
         hasLastPos = p.getBoolean("hasLastPos", false);
         lastLat = Double.longBitsToDouble(p.getLong("lastLat", 0));
         lastLon = Double.longBitsToDouble(p.getLong("lastLon", 0));
@@ -85,10 +75,6 @@ public class Settings {
                 .putInt("videoShownMode", videoShownMode)
                 .putBoolean("keepRunning", keepRunning)
                 .putBoolean("checkUpdates", checkUpdates)
-                .putFloat("videoX", videoX)
-                .putFloat("videoY", videoY)
-                .putFloat("videoW", videoW)
-                .putFloat("videoH", videoH)
                 .putBoolean("hasLastPos", hasLastPos)
                 .putLong("lastLat", Double.doubleToLongBits(lastLat))
                 .putLong("lastLon", Double.doubleToLongBits(lastLon));

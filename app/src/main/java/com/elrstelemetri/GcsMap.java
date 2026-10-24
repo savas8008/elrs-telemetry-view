@@ -128,11 +128,28 @@ public class GcsMap {
         view.getOverlays().add(scale);
         view.getOverlays().add(copyright);
 
-        // Dragging the map turns follow mode off
+        // Dragging the map with one finger turns follow mode off. Taps (which jitter a few pixels) and
+        // two-finger zooming keep it on: the map stays centred on the aircraft while zooming.
+        final int slop = android.view.ViewConfiguration.get(c).getScaledTouchSlop();
+        final float[] down = new float[2];
+        final boolean[] multi = {false};
         view.setOnTouchListener((v, e) -> {
-            if (e.getActionMasked() == MotionEvent.ACTION_MOVE && follow) {
-                follow = false;
-                if (onFollowChanged != null) onFollowChanged.run();
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    down[0] = e.getX();
+                    down[1] = e.getY();
+                    multi[0] = false;
+                    break;
+                case MotionEvent.ACTION_POINTER_DOWN:
+                    multi[0] = true;
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (follow && !multi[0] && e.getPointerCount() == 1
+                            && Math.hypot(e.getX() - down[0], e.getY() - down[1]) > slop) {
+                        follow = false;
+                        if (onFollowChanged != null) onFollowChanged.run();
+                    }
+                    break;
             }
             return false;
         });

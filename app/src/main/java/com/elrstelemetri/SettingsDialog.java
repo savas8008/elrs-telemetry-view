@@ -319,26 +319,10 @@ public class SettingsDialog {
         card.addView(label("Display"));
         RadioGroup mode = radio(card, new String[]{
                 "Hidden",
-                "Floating panel — drag to move, pinch or drag the ◢ corner to resize",
-                "Replace the map — video fills the screen, telemetry on top"}, s.videoMode, false);
-        card.addView(label("Panel size"));
-        final int[] preset = {-1};
-        TextView presetInfo = label("Current: " + describeGeometry());
-        presetInfo.setTextColor(C_LABEL);
-        presetInfo.setTextSize(12);
-        LinearLayout sizes = new LinearLayout(ctx);
-        sizes.setOrientation(LinearLayout.HORIZONTAL);
-        for (int i = 0; i < Settings.VIDEO_PRESETS.length; i++) {
-            final int idx = i;
-            int[] p = Settings.VIDEO_PRESETS[i];
-            sizes.addView(button(Settings.VIDEO_PRESET_NAMES[i] + " " + p[0] + "×" + p[1], false, v -> {
-                preset[0] = idx;
-                presetInfo.setText("Selected: " + Settings.VIDEO_PRESET_NAMES[idx]
-                        + " (placed above the buttons; drag it afterwards to move or resize)");
-            }));
-        }
-        card.addView(sizes);
-        card.addView(presetInfo);
+                "Video 30 % · map 70 % — side by side, never overlapping",
+                "Video 70 % · map 30 %"}, s.videoMode, false);
+        hint(card, "The enlarge/shrink button on the video swaps the two sizes. The telemetry panel is hidden "
+                + "when the goggles connect; the telemetry button slides it in from the left.");
 
         Switch keep = sw(card, "Keep running in the background", s.keepRunning);
         hint(card, "Keeps video, telemetry, spoken alarms and logging running while the screen is off or another "
@@ -347,26 +331,7 @@ public class SettingsDialog {
             s.keepRunning = keep.isChecked();
             s.videoMode = checkedIndex(mode, s.videoMode);
             if (s.videoMode != Settings.VIDEO_OFF) s.videoShownMode = s.videoMode;
-            if (preset[0] >= 0) applyPreset(preset[0]);
         });
-    }
-
-    private String describeGeometry() {
-        if (s.videoW <= 0) return "default (Medium, above the buttons)";
-        android.util.DisplayMetrics m = ctx.getResources().getDisplayMetrics();
-        return Math.round(s.videoW * m.widthPixels / m.density) + "×" + Math.round(s.videoH * m.heightPixels / m.density)
-                + " dp, custom position";
-    }
-
-    /** Sets a preset panel size, centred above the bottom buttons. */
-    private void applyPreset(int i) {
-        android.util.DisplayMetrics m = ctx.getResources().getDisplayMetrics();
-        float sw = m.widthPixels, sh = m.heightPixels;
-        float w = Settings.VIDEO_PRESETS[i][0] * m.density, h = Settings.VIDEO_PRESETS[i][1] * m.density;
-        s.videoW = Math.min(1f, w / sw);
-        s.videoH = Math.min(1f, h / sh);
-        s.videoX = Math.max(0f, (sw - w) / 2 / sw);
-        s.videoY = Math.max(0f, (sh - h - 58 * m.density) / sh);
     }
 
     private void save() {

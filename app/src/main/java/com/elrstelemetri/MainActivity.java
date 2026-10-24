@@ -55,6 +55,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
     private static final int C_BAD = Color.rgb(255, 64, 64);
     private static final int C_STALE = Color.rgb(95, 100, 110);
     private static final int C_PANEL = Color.argb(200, 12, 15, 20);
+    private static final int PANEL_WIDTH_DP = 220;
 
     private final TelemetryState state = new TelemetryState();
     private final CrsfParser parser = new CrsfParser(state);
@@ -104,7 +105,9 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
     private String activeAlarmIds = "";
 
     // Views
-    private LinearLayout leftPanel, rightPanel;
+    // One telemetry panel; slides in from the left with the telemetry button, hidden when the goggles connect
+    private android.widget.ScrollView telemetryPanel;
+    private boolean panelShown, panelApplied;
     // Shown until the first telemetry arrives: everything else is hidden
     private View topBar, buttonBar, dimView;
     private LinearLayout waitCard;
@@ -114,6 +117,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
     private OfflineMapPlanner planner;
     private boolean planning;
     private boolean followBeforePlanning = true;  // the planner turns follow off; restored when it closes
+    private boolean followedFirstFix;
 
     // In-app updates (GitHub releases)
     private static final long UPDATE_CHECK_EVERY_MS = 6 * 3600 * 1000L;
@@ -166,6 +170,12 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
             @Override
             public void onStreamStarted() {
                 videoPanel.onConnected();
+                // the goggles' OSD shows the telemetry: give the screen to the map and the video
+                if (settings.showPanels) {
+                    settings.showPanels = false;
+                    settings.save(prefs);
+                    applyPanelVisibility(true);
+                }
                 Toast.makeText(MainActivity.this, settings.videoMode == Settings.VIDEO_OFF
                         ? "Goggles video connected — tap the goggles button to show it" : "Goggles video connected",
                         Toast.LENGTH_SHORT).show();
@@ -195,24 +205,13 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         videoWindow = new VideoWindow(this, videoPanel);
         videoWindow.setListener(new VideoWindow.Listener() {
             @Override
-            public void onToggleFull() {
-                setVideoMode(settings.videoMode == Settings.VIDEO_REPLACE_MAP
-                        ? Settings.VIDEO_PANEL : Settings.VIDEO_REPLACE_MAP);
+            public void onToggleSize() {
+                setVideoMode(settings.videoMode == Settings.VIDEO_LARGE ? Settings.VIDEO_SMALL : Settings.VIDEO_LARGE);
             }
 
             @Override
             public void onClose() {
                 setVideoMode(Settings.VIDEO_OFF);
-            }
-
-            @Override
-            public void onGeometryChanged() {
-                float[] g = videoWindow.geometryFractions();
-                settings.videoX = g[0];
-                settings.videoY = g[1];
-                settings.videoW = g[2];
-                settings.videoH = g[3];
-                settings.save(prefs);
             }
         });
         setContentView(buildUi());
@@ -363,8 +362,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
                         state.datagramCount++;
                         state.lastDatagramTime = t;
                         state.lastSource = pk.getAddress().getHostAddress();
-                        if (frames > 0) state.mavlinkSuspect = false;
-                        else if (n > 0 && (buf[0] == (byte) 0xFD || buf[0] == (byte) 0xFE)) state.mavlinkSuspect = true;
+                        state.noteDatagram(n > 0 ? buf[0] & 0xFF : -1, frames, t);
                     }
                     if (rawEnabled) addRaw(buf, n, frames);
                 }
@@ -430,32 +428,45 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
 
     private void applyVideoMode() {
         boolean show = settings.videoMode != Settings.VIDEO_OFF && gcsShown();
-        boolean replace = show && settings.videoMode == Settings.VIDEO_REPLACE_MAP;
         videoWindow.setVisibility(show ? View.VISIBLE : View.GONE);
-        map.view.setVisibility(replace ? View.INVISIBLE : View.VISIBLE);
+        videoWindow.setLarge(settings.videoMode == Settings.VIDEO_LARGE);
         if (bVideo != null) {
             ((GradientDrawable) bVideo.getBackground()).setColor(show ? Color.argb(220, 0, 140, 200) : C_PANEL);
         }
-        if (!show) return;
-        if (replace) {
-            videoWindow.setFloating(false);
-            videoWindow.fillParent();
-            return;
-        }
-        videoWindow.setFloating(true);
+        applyLayout();
+    }
+
+    /** Places map and video side by side (30/70 or 70/30, never overlapping) and the alarm banner over the map. */
+    private void applyLayout() {
         int pw = gcsRoot.getWidth(), ph = gcsRoot.getHeight();
-        if (pw == 0 || ph == 0) {          // not laid out yet
-            gcsRoot.post(this::applyVideoMode);
-            return;
+        if (pw == 0 || ph == 0) return;   // the root's layout listener calls again once laid out
+        boolean show = settings.videoMode != Settings.VIDEO_OFF && gcsShown();
+        SplitLayout l = SplitLayout.compute(pw, ph, show, settings.videoMode == Settings.VIDEO_LARGE,
+                dp(56), dp(58));
+        place(map.view, l.map);
+        if (l.video != null) place(videoWindow, l.video);
+
+        // banner: centred over the map, clear of the telemetry panel when there is room
+        int left = l.map[0] + dp(8);
+        int panelRight = dp(8 + PANEL_WIDTH_DP + 8);
+        if (panelShown && SplitLayout.width(l.map) - panelRight > dp(220)) left = l.map[0] + panelRight;
+        FrameLayout.LayoutParams wlp = (FrameLayout.LayoutParams) tWarn.getLayoutParams();
+        int right = pw - l.map[2] + dp(8);
+        if (wlp.leftMargin != left || wlp.rightMargin != right) {
+            wlp.leftMargin = left;
+            wlp.rightMargin = right;
+            tWarn.setLayoutParams(wlp);
         }
-        if (settings.videoW > 0 && settings.videoH > 0) {
-            videoWindow.setGeometry(Math.round(settings.videoX * pw), Math.round(settings.videoY * ph),
-                    Math.round(settings.videoW * pw), Math.round(settings.videoH * ph));
-        } else {
-            int[] p = Settings.VIDEO_PRESETS[1];  // default: Medium, centred above the buttons
-            int w = dp(p[0]), h = dp(p[1]);
-            videoWindow.setGeometry((pw - w) / 2, ph - h - dp(58), w, h);
-        }
+    }
+
+    private static void place(View v, int[] r) {
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) v.getLayoutParams();
+        int w = SplitLayout.width(r), h = SplitLayout.height(r);
+        if (lp != null && lp.width == w && lp.height == h && lp.leftMargin == r[0] && lp.topMargin == r[1]) return;
+        lp = new FrameLayout.LayoutParams(w, h, Gravity.TOP | Gravity.START);
+        lp.leftMargin = r[0];
+        lp.topMargin = r[1];
+        v.setLayoutParams(lp);
     }
 
     // ================================================================ Update loops
@@ -567,6 +578,12 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
                 settings.lastLon = s.lon;
             }
             map.update(hasFix, s.lat, s.lon, curHeading, !gpsFresh, s.homeSet, s.homeLat, s.homeLon);
+            if (hasFix && !followedFirstFix) {
+                // the session's first fix: follow the aircraft, even if the map was moved while waiting
+                followedFirstFix = true;
+                if (planning) followBeforePlanning = true;
+                else map.setFollow(true);
+            }
 
             // ---- Top bar
             setText(tMode, mode.isEmpty() ? "MODE —" : mode.replace("*", ""), C_TEXT, !fMode.isFresh(s.modeTime, now));
@@ -635,7 +652,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
             tInfo.setText(info);
 
             // ---- Notices (not alarms)
-            if (s.mavlinkSuspect) {
+            if (s.mavlinkSuspect && !linkFresh) {
                 notices.add("Receiving MAVLink — set Link Mode = Normal on the radio");
             } else if (s.datagramCount > 20 && s.frameCount == 0) {
                 notices.add("Packets arrive but contain no CRSF frames — Settings › Show raw UDP data");
@@ -1095,11 +1112,14 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
     private View buildUi() {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
+        // Map and video share the screen side by side (see applyLayout); the panels float over the map
         root.addView(map.view, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
-        // Video sits above the map and below the panels, so in full-screen mode telemetry overlays the video
-        root.addView(videoWindow);
+        root.addView(videoWindow, new FrameLayout.LayoutParams(0, 0));
         gcsRoot = root;
+        root.addOnLayoutChangeListener((v, l, t, rr, b, ol, ot, orr, ob) -> {
+            if (rr - l != orr - ol || b - t != ob - ot) v.post(this::applyLayout);
+        });
 
         // ---- Top bar
         LinearLayout top = new LinearLayout(this);
@@ -1142,57 +1162,56 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         root.addView(top, tlp);
         topBar = top;
 
-        // ---- Left panel: flight
-        leftPanel = panel();
+        // ---- Telemetry panel (left): flight, then power and link. Scrolls when taller than the screen.
+        LinearLayout panel = panel();
         horizon = new HorizonView(this);
-        leftPanel.addView(horizon, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(118)));
-        LinearLayout r = row(leftPanel);
+        panel.addView(horizon, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(118)));
+        LinearLayout r = row(panel);
         vAlt = stat(r, "ALTITUDE", 20);
         vVario = stat(r, "VARIO", 15);
-        r = row(leftPanel);
+        r = row(panel);
         vSpeed = stat(r, "SPEED", 16);
         vDist = stat(r, "HOME DIST", 16);
-        r = row(leftPanel);
+        r = row(panel);
         vHomeDir = stat(r, "TO HOME", 15);
         vGpsAlt = stat(r, "GPS ALT (MSL)", 15);
-        // Position, log file, downloads and video info (the bottom edge is reserved for the buttons)
+        sectionTitle(panel, "POWER");
+        battery = new BatteryView(this);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40));
+        blp.setMargins(dp(2), dp(2), dp(2), dp(2));
+        panel.addView(battery, blp);
+        r = row(panel);
+        vCell = stat(r, "CELL", 14);
+        vCurr = stat(r, "CURRENT", 14);
+        r = row(panel);
+        vMah = stat(r, "USED", 14);
+        vPower = stat(r, "POWER", 14);
+        sectionTitle(panel, "LINK");
+        r = row(panel);
+        vSnr = stat(r, "SNR", 13);
+        vTxPow = stat(r, "TX POWER", 13);
+        r = row(panel);
+        vDown = stat(r, "DOWNLINK", 12);
+        vRf = stat(r, "ANT / RF", 12);
+        sparkAlt = new SparklineView(this, "ALTITUDE (5 min)", "m", C_ACCENT);
+        panel.addView(sparkAlt, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)));
+        sparkVolt = new SparklineView(this, "VOLTAGE (5 min)", "V", Color.rgb(255, 200, 0));
+        panel.addView(sparkVolt, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)));
+        // Position, log file, downloads and video info
         tInfo = text(10, C_LABEL, false);
         tInfo.setSingleLine(false);
         tInfo.setMaxLines(4);
         tInfo.setPadding(dp(6), dp(4), dp(4), 0);
-        leftPanel.addView(tInfo);
-        FrameLayout.LayoutParams llp = new FrameLayout.LayoutParams(dp(210), FrameLayout.LayoutParams.WRAP_CONTENT,
+        panel.addView(tInfo);
+        telemetryPanel = new android.widget.ScrollView(this);
+        telemetryPanel.setVerticalScrollBarEnabled(false);
+        telemetryPanel.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        telemetryPanel.addView(panel);
+        // between the top bar and the buttons
+        FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(dp(PANEL_WIDTH_DP), FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP | Gravity.START);
-        llp.setMargins(dp(8), dp(56), 0, 0);
-        root.addView(leftPanel, llp);
-
-        // ---- Right panel: power + link
-        rightPanel = panel();
-        battery = new BatteryView(this);
-        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40));
-        blp.setMargins(dp(2), dp(2), dp(2), dp(2));
-        rightPanel.addView(battery, blp);
-        r = row(rightPanel);
-        vCell = stat(r, "CELL", 14);
-        vCurr = stat(r, "CURRENT", 14);
-        r = row(rightPanel);
-        vMah = stat(r, "USED", 14);
-        vPower = stat(r, "POWER", 14);
-        sectionTitle(rightPanel, "LINK");
-        r = row(rightPanel);
-        vSnr = stat(r, "SNR", 13);
-        vTxPow = stat(r, "TX POWER", 13);
-        r = row(rightPanel);
-        vDown = stat(r, "DOWNLINK", 12);
-        vRf = stat(r, "ANT / RF", 12);
-        sparkAlt = new SparklineView(this, "ALTITUDE (5 min)", "m", C_ACCENT);
-        rightPanel.addView(sparkAlt, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)));
-        sparkVolt = new SparklineView(this, "VOLTAGE (5 min)", "V", Color.rgb(255, 200, 0));
-        rightPanel.addView(sparkVolt, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)));
-        FrameLayout.LayoutParams rlp = new FrameLayout.LayoutParams(dp(210), FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP | Gravity.END);
-        rlp.setMargins(0, dp(56), dp(8), 0);
-        root.addView(rightPanel, rlp);
+        plp.setMargins(dp(8), dp(56), 0, dp(58));
+        root.addView(telemetryPanel, plp);
 
         // ---- Alarm / notice banner (tap to mute alarms)
         tWarn = new TextView(this);
@@ -1214,7 +1233,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         });
         FrameLayout.LayoutParams wlp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-        wlp.setMargins(dp(230), dp(58), dp(230), 0);
+        wlp.setMargins(dp(8), dp(58), dp(8), 0);  // centred over the map, see applyLayout
         root.addView(tWarn, wlp);
 
         // ---- Bottom: map buttons
@@ -1243,15 +1262,17 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         // goggles = video panel on/off (fullscreen/PiP and close are on the video itself)
         bVideo = mapButton(buttons, R.drawable.ic_goggles, v -> {
             boolean on = settings.videoMode == Settings.VIDEO_OFF;
-            int shown = settings.videoShownMode == Settings.VIDEO_OFF ? Settings.VIDEO_PANEL : settings.videoShownMode;
+            int shown = settings.videoShownMode == Settings.VIDEO_OFF ? Settings.VIDEO_SMALL : settings.videoShownMode;
             setVideoMode(on ? shown : Settings.VIDEO_OFF);
             if (on && !n3.isStreaming() && !n3.accessoryPresent()) {
                 Toast.makeText(this, "Connect the goggles with a USB-C cable", Toast.LENGTH_SHORT).show();
             }
         });
+        // telemetry panel: slides in from the left / back out
         mapButton(buttons, R.drawable.ic_panels, v -> {
             settings.showPanels = !settings.showPanels;
-            applyPanelVisibility();
+            settings.save(prefs);
+            applyPanelVisibility(true);
         });
         mapButton(buttons, R.drawable.ic_summary, v -> showSummary());
         mapButton(buttons, R.drawable.ic_settings, v -> showSettings());
@@ -1330,7 +1351,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         setWaiting(true);
 
         updateFollowButton();
-        applyPanelVisibility();
+        applyPanelVisibility(false);
         applyVideoMode();
         return root;
     }
@@ -1360,7 +1381,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         dimView.setVisibility(wait);
         waitCard.setVisibility(wait);
         planner.setVisibility(planning ? View.VISIBLE : View.GONE);
-        applyPanelVisibility();
+        applyPanelVisibility(false);
         applyVideoMode();
     }
 
@@ -1389,10 +1410,29 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         }
     }
 
-    private void applyPanelVisibility() {
-        int v = settings.showPanels && gcsShown() ? View.VISIBLE : View.GONE;
-        leftPanel.setVisibility(v);
-        rightPanel.setVisibility(v);
+    /** Shows or hides the telemetry panel; {@code animate}: slide in from / out to the left edge. */
+    private void applyPanelVisibility(boolean animate) {
+        boolean show = settings.showPanels && gcsShown();
+        if (show == panelShown && panelApplied) return;
+        panelApplied = true;
+        panelShown = show;
+        View p = telemetryPanel;
+        float off = -(p.getWidth() > 0 ? p.getWidth() : dp(PANEL_WIDTH_DP)) - dp(8);
+        p.animate().cancel();
+        if (!animate) {
+            p.setTranslationX(0);
+            p.setVisibility(show ? View.VISIBLE : View.GONE);
+        } else if (show) {
+            p.setTranslationX(off);
+            p.setVisibility(View.VISIBLE);
+            p.animate().translationX(0).setDuration(220).start();
+        } else {
+            p.animate().translationX(off).setDuration(220).withEndAction(() -> {
+                p.setVisibility(View.GONE);
+                p.setTranslationX(0);
+            }).start();
+        }
+        applyLayout();
     }
 
     private void updateFollowButton() {

@@ -26,15 +26,16 @@ radio's telemetry **on a map**. No MAVLink needed: it reads the CRSF telemetry t
 - **Full-screen map**: Satellite, Topographic, Street (Esri) or OpenStreetMap
 - **Offline maps**: search a place, frame your flying field on the map and download it at home, without the radio
 - **Aircraft icon** rotated to heading, **flight track**, **home** marker and a line to home
-- **Follow mode**: the map tracks the aircraft; dragging the map turns it off, the follow button turns it back on
+- **Follow mode**: on at start and at the first GPS fix; the map tracks the aircraft. Dragging the map with one
+  finger turns it off (taps and two-finger zooming do not), the follow button turns it back on
 - **Artificial horizon** with compass tape
 - **All telemetry on one screen**: altitude, vario, speed, distance and direction to home, GPS altitude,
   voltage, cell voltage, current, consumed mAh, power, LQ, RSSI, SNR, TX power, downlink, antenna,
   RF mode, satellites, flight mode, arm state
 - **Altitude and voltage charts** (last 5 minutes)
 - **Configurable alarms** with on-screen banner, voice and vibration (see [Alarms](#alarms))
-- **Live goggles video straight from DJI Goggles N3 over USB** — no DJI Fly needed — in a floating
-  panel you can drag and resize, or replacing the map with telemetry overlaid (see [Goggles video](#goggles-video-dji-goggles-n3-over-usb))
+- **Live goggles video straight from DJI Goggles N3 over USB** — no DJI Fly needed — side by side with the
+  map, 30/70 or 70/30, never overlapping (see [Goggles video](#goggles-video-dji-goggles-n3-over-usb))
 - **Flight log (CSV)**: on by default, starts automatically when telemetry arrives
 - **Flight summary**: duration, max altitude, max distance, max speed/current, min cell voltage
 - Landscape, full screen, screen stays on
@@ -102,18 +103,17 @@ network streaming.
    - When Android asks which app to open for the DJI accessory, choose **ELRS Telemetry**
      (tick "always" to skip the question next time). If the app is already open it connects automatically.
    - Tapping **Connect** without goggles attached explains these steps.
-3. The video appears. How it is shown is up to you:
-   - **Floating panel** (default): drag the panel to move it, drag the **◢** corner to resize it.
-     Position and size are remembered. Preset sizes (Small 240×135, Medium 320×180, Large 480×270)
-     are in ⚙ Settings → Goggles video.
-   - **Replace the map**: the video fills the screen and the telemetry panels are overlaid on it.
+3. The video appears on the right and the screen is split automatically — the video and the map never
+   overlap, and the aircraft stays in the middle of the visible map:
+   - **Video 30 % · map 70 %** (default)
+   - **Video 70 % · map 30 %**
+4. When the goggles connect, the telemetry panel is hidden (the goggles' OSD already shows the
+   telemetry). The **telemetry** button slides it back in from the left.
 
 Controls:
 - The video is **closed when the app starts**. The **goggles** button in the bottom bar opens/closes it
-  (blue = open) and reopens it the way it was last shown (panel or full screen).
-- On the floating panel: **pinch with two fingers** to resize (the aspect ratio is kept), drag with one finger
-  to move, or drag the **◢** corner to resize freely. Top-right: **fullscreen** = replace the map, **✕** = close.
-- While the video replaces the map (bottom-left): **picture-in-picture** = back to the floating panel, **✕** = close.
+  (blue = open) and reopens it at the size last used.
+- Top-right of the video: **enlarge / shrink** swaps the 30 % / 70 % split, **✕** = close.
 
 Telemetry still comes from the backpack WiFi, so one device does everything: WiFi for telemetry,
 USB for video.
@@ -139,13 +139,13 @@ USB for video.
 | Area | Content |
 |---|---|
 | Top bar | Flight mode, arm state, flight time, LQ, RSSI, satellites, logging state (tap to toggle), source IP, packet rate, map source |
-| Left panel | Artificial horizon + compass, altitude, vario, ground speed, home distance, direction to home (arrow relative to the nose), GPS altitude; coordinates, log file, download and video status |
-| Right panel | Battery gauge, cell voltage, current, consumed mAh, power; SNR, TX power, downlink, antenna/RF; altitude and voltage charts |
+| Telemetry panel (left, scrolls) | Artificial horizon + compass, altitude, vario, ground speed, home distance, direction to home (arrow relative to the nose), GPS altitude; battery gauge, cell voltage, current, consumed mAh, power; SNR, TX power, downlink, antenna/RF; altitude and voltage charts; coordinates, log file, download and video status |
+| Right (when open) | Goggles video, 30 % or 70 % of the width |
 | Top centre | Alarms (red) and notices — **tap to mute alarms for 2 minutes** |
 | Bottom | Buttons |
 
 Buttons (left to right): follow · map layer · reset home · clear track ·
-goggles video panel · show/hide panels · flight summary · settings
+goggles video · telemetry panel (slides in/out from the left) · flight summary · settings
 
 - **Altitude**: barometric altitude if the FC sends it (zeroed at arming), otherwise GPS altitude minus home altitude.
 - **Home**: taken automatically at the first GPS fix with 6 or more satellites.
@@ -205,7 +205,7 @@ permission needed). Open them with a file manager or import them into a spreadsh
 | Vibrate on alarm | on |
 | Alarm repeat interval | 15 s |
 | UDP port | 14550 |
-| Goggles video | floating panel (Medium, above the buttons) |
+| Goggles video | video 30 % · map 70 % |
 | Keep running in the background | on |
 
 **Settings → Show raw UDP data** shows incoming packets for troubleshooting.

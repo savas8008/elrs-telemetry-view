@@ -9,6 +9,16 @@ Earlier test builds were signed with a temporary key. **Uninstall the old app on
 this version (Android shows "App not installed" otherwise). From this version on, new releases
 install as normal updates and keep your settings.
 
+### New in 1.5
+- **Video and map side by side**: the goggles video takes 30 % or 70 % of the width and the map the rest,
+  so they never overlap and the aircraft stays in the middle of the visible map. The button on the video
+  swaps the sizes.
+- **One telemetry panel** on the left instead of two; it is hidden when the goggles connect (the goggles'
+  OSD shows the telemetry) and the telemetry button slides it in from the left.
+- Fix: the "Receiving MAVLink — set Link Mode = Normal" notice appeared during flights although CRSF
+  telemetry was arriving. It now appears only when MAVLink arrives and no CRSF telemetry does.
+- Follow mode: on at the first GPS fix; taps and two-finger zooming on the map no longer turn it off.
+
 ### New in 1.4
 - Fix: after using the offline map screen, the map did not follow the aircraft any more until the
   follow button was pressed. Follow mode is now restored when the offline map screen is closed.
