@@ -39,7 +39,27 @@ public class TelemetryState {
     // Statistics
     public long frameCount, datagramCount, lastDatagramTime;
     public String lastSource = "";
+    /**
+     * Only MAVLink is arriving (radio Link Mode = MAVLink). A stray packet that starts like MAVLink while
+     * CRSF telemetry is decoded is not enough: that happened in flight and showed a false warning.
+     */
     public boolean mavlinkSuspect;
+    private int mavlinkStreak;
+    private long lastCrsfTime;
+    static final int MAVLINK_STREAK = 20;
+    static final long MAVLINK_QUIET_MS = 5000;
+
+    /** Called for every datagram with its first byte and the number of CRSF frames found in it. */
+    void noteDatagram(int firstByte, int crsfFrames, long now) {
+        if (crsfFrames > 0) {
+            lastCrsfTime = now;
+            mavlinkStreak = 0;
+        } else if (firstByte == 0xFD || firstByte == 0xFE) {
+            mavlinkStreak++;
+        }
+        mavlinkSuspect = mavlinkStreak >= MAVLINK_STREAK
+                && (lastCrsfTime == 0 || now - lastCrsfTime > MAVLINK_QUIET_MS);
+    }
 
     void updateHome() {
         if (!homeSet && sats >= HOME_MIN_SATS && (lat != 0 || lon != 0)) {

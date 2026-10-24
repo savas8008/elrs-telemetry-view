@@ -130,11 +130,15 @@ public class GcsScreenshotTest {
         int h = root.getHeight() > 0 ? root.getHeight() : 780;
         render(root, w, h, "gcs.png");
 
-        a.setVideoMode(Settings.VIDEO_REPLACE_MAP);
+        a.videoLinkForScreenshots = true;  // no goggles in the test: show the split screen anyway
+        a.settings().videoFraction = 0.30f;
+        a.setVideoMode(Settings.VIDEO_ON);
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(300));
+        render(root, w, h, "gcs-split.png");
+        a.settings().videoFraction = 0.65f;
+        a.setVideoMode(Settings.VIDEO_ON);
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(300));
         render(root, w, h, "gcs-full.png");
-        a.setVideoMode(Settings.VIDEO_PANEL);
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(300));
 
         Dialog settings = a.showSettings();
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(300));
