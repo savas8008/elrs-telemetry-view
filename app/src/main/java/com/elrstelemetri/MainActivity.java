@@ -121,7 +121,6 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
     private OfflineMapPlanner planner;
     private boolean planning;
     private boolean followBeforePlanning = true;  // the planner turns follow off; restored when it closes
-    private boolean followedFirstFix;
 
     // In-app updates (GitHub releases)
     private static final long UPDATE_CHECK_EVERY_MS = 6 * 3600 * 1000L;
@@ -622,12 +621,6 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
                 settings.lastLon = s.lon;
             }
             map.update(hasFix, s.lat, s.lon, curHeading, !gpsFresh, s.homeSet, s.homeLat, s.homeLon);
-            if (hasFix && !followedFirstFix) {
-                // the session's first fix: follow the aircraft, even if the map was moved while waiting
-                followedFirstFix = true;
-                if (planning) followBeforePlanning = true;
-                else map.setFollow(true);
-            }
 
             // ---- Top bar
             setText(tMode, mode.isEmpty() ? "MODE —" : mode.replace("*", ""), C_TEXT, !fMode.isFresh(s.modeTime, now));

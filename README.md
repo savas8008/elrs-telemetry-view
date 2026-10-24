@@ -26,8 +26,8 @@ radio's telemetry **on a map**. No MAVLink needed: it reads the CRSF telemetry t
 - **Full-screen map**: Satellite, Topographic, Street (Esri) or OpenStreetMap
 - **Offline maps**: search a place, frame your flying field on the map and download it at home, without the radio
 - **Aircraft icon** rotated to heading, **flight track**, **home** marker and a line to home
-- **Follow mode**: on at start and at the first GPS fix; the map tracks the aircraft. Dragging the map with one
-  finger turns it off (taps and two-finger zooming do not), the follow button turns it back on
+- **Follow mode**: on when the app starts; the map tracks the aircraft. Only the follow button turns it
+  off and on again — moving or zooming the map does not
 - **Artificial horizon** with compass tape
 - **All telemetry on one screen**: altitude, vario, speed, distance and direction to home, GPS altitude,
   voltage, cell voltage, current, consumed mAh, power, LQ, RSSI, SNR, TX power, downlink, antenna,

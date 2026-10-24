@@ -5,6 +5,8 @@ import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
 
 import android.os.Looper;
+import android.os.SystemClock;
+import android.view.MotionEvent;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -37,5 +39,18 @@ public class PlannerFollowTest {
         shadowOf(Looper.getMainLooper()).idle();
         a.closePlanner();
         assertFalse(a.map().isFollowing());
+    }
+
+    @Test
+    public void draggingTheMapKeepsFollowOn() {
+        MainActivity a = Robolectric.buildActivity(MainActivity.class).setup().get();
+        android.view.View v = a.map().view;
+        long t = SystemClock.uptimeMillis();
+        v.dispatchTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, 100, 100, 0));
+        for (int i = 1; i <= 10; i++) {
+            v.dispatchTouchEvent(MotionEvent.obtain(t, t + i * 16, MotionEvent.ACTION_MOVE, 100 + 30 * i, 100, 0));
+        }
+        v.dispatchTouchEvent(MotionEvent.obtain(t, t + 200, MotionEvent.ACTION_UP, 400, 100, 0));
+        assertTrue("only the follow button switches follow mode", a.map().isFollowing());
     }
 }
