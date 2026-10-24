@@ -1,10 +1,8 @@
 package com.elrstelemetri;
 
-import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.view.MotionEvent;
 
 import org.osmdroid.config.Configuration;
 import org.osmdroid.config.IConfigurationProvider;
@@ -83,7 +81,6 @@ public class GcsMap {
         cfg.setExpirationOverrideDuration(365L * 24 * 3600 * 1000);
     }
 
-    @SuppressLint("ClickableViewAccessibility")
     public GcsMap(Context c, float density) {
         view = new MapView(c);
         view.setMultiTouchControls(true);
@@ -128,31 +125,8 @@ public class GcsMap {
         view.getOverlays().add(scale);
         view.getOverlays().add(copyright);
 
-        // Dragging the map with one finger turns follow mode off. Taps (which jitter a few pixels) and
-        // two-finger zooming keep it on: the map stays centred on the aircraft while zooming.
-        final int slop = android.view.ViewConfiguration.get(c).getScaledTouchSlop();
-        final float[] down = new float[2];
-        final boolean[] multi = {false};
-        view.setOnTouchListener((v, e) -> {
-            switch (e.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    down[0] = e.getX();
-                    down[1] = e.getY();
-                    multi[0] = false;
-                    break;
-                case MotionEvent.ACTION_POINTER_DOWN:
-                    multi[0] = true;
-                    break;
-                case MotionEvent.ACTION_MOVE:
-                    if (follow && !multi[0] && e.getPointerCount() == 1
-                            && Math.hypot(e.getX() - down[0], e.getY() - down[1]) > slop) {
-                        follow = false;
-                        if (onFollowChanged != null) onFollowChanged.run();
-                    }
-                    break;
-            }
-            return false;
-        });
+        // Follow mode is switched only with the follow button: moving or zooming the map never turns it off
+        // (while following, the map re-centres on the aircraft at the next update).
     }
 
     public void setOnFollowChanged(Runnable r) {

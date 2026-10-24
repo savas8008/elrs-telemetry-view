@@ -9,6 +9,10 @@ Earlier test builds were signed with a temporary key. **Uninstall the old app on
 this version (Android shows "App not installed" otherwise). From this version on, new releases
 install as normal updates and keep your settings.
 
+### New in 1.6
+- Follow mode is switched only with the follow button. Moving or zooming the map no longer turns it
+  off; it is on when the app starts.
+
 ### New in 1.5
 - **Video and map side by side**: they never overlap and the aircraft stays in the middle of the visible
   map. Drag the bar between them to choose the ratio (remembered). The video opens by itself when the
@@ -41,7 +45,7 @@ install as normal updates and keep your settings.
 - Live map with aircraft, track and home; attitude, altitude, speed, battery and link panels
 - Alarms (altitude, speed, battery, link quality, telemetry lost) with voice and vibration
 - Offline maps: search a place, frame your flying field and download it at home
-- DJI Goggles N3 video over USB in a floating window (drag to move, pinch to resize) or full screen
+- DJI Goggles N3 video over USB next to the map (drag the bar between them to set the ratio)
 - Flight log (CSV), works in the background with the screen off
 - Smooth display at every telemetry ratio (1:2 … 1:128)
 
