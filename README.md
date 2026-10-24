@@ -113,7 +113,8 @@ network streaming.
 Controls:
 - The **goggles** button in the bottom bar switches the video on/off (blue = on). While it is on, the
   video is shown whenever the goggles stream; when the stream ends the map takes the whole screen again.
-- Top-right of the video: **✕** = close.
+- Top-right of the video: **✕** = close. A closed video gives the map the whole screen and stays closed,
+  even when the goggles reconnect, until the goggles button opens it again.
 
 Telemetry still comes from the backpack WiFi, so one device does everything: WiFi for telemetry,
 USB for video.

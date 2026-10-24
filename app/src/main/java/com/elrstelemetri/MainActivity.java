@@ -100,6 +100,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
     private VideoPanel videoPanel;
     private VideoWindow videoWindow;
     private View divider;
+    private boolean videoClosedByUser;  // closed with ✕ / the goggles button: no automatic reopening
     private FrameLayout gcsRoot;
 
     // Derived values (UI thread)
@@ -179,8 +180,9 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
                     settings.save(prefs);
                     applyPanelVisibility(true);
                 }
-                // split the screen with the map; without goggles video the map has the whole screen
-                if (settings.videoMode == Settings.VIDEO_OFF) setVideoMode(Settings.VIDEO_ON);
+                // split the screen with the map; without goggles video the map has the whole screen.
+                // Not if the user closed the video: it stays closed (map 100 %) until they open it again.
+                if (settings.videoMode == Settings.VIDEO_OFF && !videoClosedByUser) setVideoMode(Settings.VIDEO_ON);
                 else applyVideoMode();
                 Toast.makeText(MainActivity.this, "Goggles video connected", Toast.LENGTH_SHORT).show();
             }
@@ -209,7 +211,10 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         });
         launchIntent = getIntent();
         videoWindow = new VideoWindow(this, videoPanel);
-        videoWindow.setListener(() -> setVideoMode(Settings.VIDEO_OFF));
+        videoWindow.setListener(() -> {
+            videoClosedByUser = true;
+            setVideoMode(Settings.VIDEO_OFF);
+        });
         setContentView(buildUi());
         hideSystemBars();
         if (Build.VERSION.SDK_INT >= 33
@@ -1303,6 +1308,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         // goggles = video next to the map on/off (shown while the goggles stream; ✕ is on the video itself)
         bVideo = mapButton(buttons, R.drawable.ic_goggles, v -> {
             boolean on = settings.videoMode == Settings.VIDEO_OFF;
+            videoClosedByUser = !on;
             setVideoMode(on ? Settings.VIDEO_ON : Settings.VIDEO_OFF);
             if (on && !n3.isStreaming()) {
                 Toast.makeText(this, n3.accessoryPresent() ? "Connecting to the goggles…"
