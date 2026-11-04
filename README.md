@@ -290,8 +290,12 @@ Builds before v1.0 were signed with temporary keys: uninstall such a build once 
 
 If the Goggles V2 or capture device video does not start, a log helps when you report the problem.
 The app writes short connection messages (device name, connection steps, errors) to Android's
-system log, under the tags `V2Usb` and `Uvc`. They stay on your device; the app does not save or send
-them anywhere. With USB debugging on, read them on a computer with `adb logcat -s V2Usb Uvc`.
+system log. They stay on your device; the app does not send them anywhere.
+
+To add them to a problem report: ⚙ **Settings → Goggles video → Copy video log**, then paste the text
+into your report or message. It starts with the app version, Android version and phone model, and you
+can read it before sending. With USB debugging on, `adb logcat -s V2Usb Uvc` shows the same messages
+on a computer.
 
 ### WiFi keeps dropping
 
@@ -349,7 +353,7 @@ The top bar shows `drops N/M` once something happens: **N** = times the WiFi its
 | `VideoPanel.java` | MediaCodec decoding of the goggles video onto a TextureView; Connect overlay |
 | `VideoWindow.java` | Floating video window: drag to move, corner handle to resize, FULL/✕ buttons |
 | `n3/*.java` | Goggles N3 USB video: logiclink decoder, H.264 access-unit assembler, subscription packets, USB accessory session (adapted from DJI Unchained VOC, Apache-2.0) |
-| `goggles/*.java` | One interface for every USB video source; status and controls go to the one that is streaming or plugged in |
+| `goggles/*.java` | One interface for every USB video source; status and controls go to the one that is streaming or plugged in; "Copy video log" |
 | `v2/V2UsbLink.java` | Goggles V2 USB video: USB permission, `RMVT` start packet, read thread, stall watchdog |
 | `uvc/UvcLink.java` | USB capture devices (UVC) through the UVCAndroid library: permissions, video mode choice, drawing into the video panel |
 | `TelemetryService.java` | Foreground service that keeps the app running while another app is in front |

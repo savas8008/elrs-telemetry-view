@@ -27,6 +27,7 @@ import android.widget.Toast;
 
 import com.elrstelemetri.goggles.GogglesLink;
 import com.elrstelemetri.goggles.GogglesLinks;
+import com.elrstelemetri.goggles.VideoLog;
 import com.elrstelemetri.n3.H264AnnexBAssembler;
 import com.elrstelemetri.n3.N3UsbLink;
 import com.elrstelemetri.uvc.UvcLink;
@@ -978,6 +979,11 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
     @Override
     public void usbReconnect() {
         connectGoggles();
+    }
+
+    @Override
+    public void copyVideoLog() {
+        VideoLog.copy(this, appVersion(), usbStatus());
     }
 
     @Override

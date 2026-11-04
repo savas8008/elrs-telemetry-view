@@ -16,6 +16,8 @@ install as normal updates and keep your settings.
 - **Analog video from an AV-to-USB capture device**: connect it to your video receiver and the phone,
   choose ELRS Telemetry and allow the camera permission (Android requires it for USB video devices)
   and the USB access; the video opens next to the map.
+- **Copy video log** in Settings → Goggles video: copies the Goggles V2 and capture device connection
+  messages, to paste into a problem report.
 
 ### New in 1.6
 - Follow mode is switched only with the follow button. Moving or zooming the map no longer turns it

@@ -53,6 +53,9 @@ public class SettingsDialog {
         /** Connects (or reconnects) the goggles over USB. */
         void usbReconnect();
 
+        /** Copies the video connection log to the clipboard. */
+        void copyVideoLog();
+
         /** Opens the offline map planner (choose an area on the map and download it). */
         void openOfflineMapPlanner();
 
@@ -317,6 +320,9 @@ public class SettingsDialog {
             host.usbReconnect();
             usbState.setText("Status: " + host.usbStatus());
         }));
+        card.addView(button("Copy video log", false, v -> host.copyVideoLog()));
+        hint(card, "For problem reports: copies the Goggles V2 and capture device connection messages (device "
+                + "name, connection steps, errors) so you can paste them into your report. Nothing is sent by the app.");
 
         card.addView(label("Display"));
         RadioGroup mode = radio(card, new String[]{
