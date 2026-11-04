@@ -22,5 +22,11 @@ The N3 control packets originate from samuelsadok/dji_protocol
 (https://github.com/samuelsadok/dji_protocol, commit
 50c71b65fdb6825783f724e5cd3c1f09c2aa88ce).
 
+DJI FPV Goggles V2 video (app/src/main/java/com/elrstelemetri/v2/V2UsbLink.java)
+uses the USB protocol documented by DigiView-Android
+(https://github.com/fpvout/DigiView-Android, MIT License) and fpv.wtf: USB IDs
+2CA3:001F, interface 3, the "RMVT" start packet and re-sending it when the stream
+stalls. The implementation was written for this app; no DigiView code is copied.
+
 This app is unofficial and is not affiliated with, endorsed by or supported by
 DJI. DJI product names are trademarks of their respective owners.

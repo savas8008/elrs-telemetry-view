@@ -36,7 +36,8 @@ radio's telemetry **on a map**. No MAVLink needed: it reads the CRSF telemetry t
 - **Configurable alarms** with on-screen banner, voice and vibration (see [Alarms](#alarms))
 - **Live goggles video straight from DJI Goggles N3 over USB** — no DJI Fly needed — side by side with the
   map at the ratio you choose, never overlapping; without goggles video the map fills the screen
-  (see [Goggles video](#goggles-video-dji-goggles-n3-over-usb))
+  (see [Goggles video](#goggles-video-dji-goggles-n3-over-usb)); **DJI FPV Goggles V2** work too
+  (see [Goggles V2](#goggles-video-dji-fpv-goggles-v2-over-usb))
 - **Flight log (CSV)**: on by default, starts automatically when telemetry arrives
 - **Flight summary**: duration, max altitude, max distance, max speed/current, min cell voltage
 - Landscape, full screen, screen stays on
@@ -134,6 +135,32 @@ USB for video.
 > Confirmed working with Goggles N3 + O4 Air Unit Lite; the original project tested N3 + O4 Air Unit Pro /
 > Avata 2. A DJI firmware update may change the protocol. Never rely on it for flight safety.
 > Not affiliated with DJI.
+
+## Goggles video (DJI FPV Goggles V2 over USB)
+
+**DJI FPV Goggles V2** (and V1) also send their live video over USB. No extra wtfos package on the
+goggles is needed for the video.
+
+1. Turn on the goggles and link them to the aircraft (live view on the goggles).
+2. Connect the goggles' USB-C port to this phone/tablet. Here the phone is the USB **host**: use a
+   USB-C data cable, or an **OTG adapter** if a plain USB-C to USB-C cable is not detected. On some phones
+   OTG must be switched on in Android's settings first.
+3. When Android asks which app to open for the USB device, choose **ELRS Telemetry**, then **allow** the
+   USB access (tick "always" to skip both next time).
+4. The video opens next to the map, exactly as with the N3. The goggles button, the ✕ and the divider
+   work the same.
+
+Differences to the N3:
+- **No OSD in the phone video.** The goggles send the air unit's video as it is; their OSD (stock or
+  MSP-OSD) is drawn on the goggles' screen only. That is why the **telemetry panel stays visible** when
+  the V2 video starts.
+- If the video stops, the app sends the goggles' start packet again after 3 s and reopens the USB
+  connection after 8 s. DigiView users report the most stable stream in the goggles' 50 Mbps mode.
+
+> [!WARNING]
+> **Unofficial and experimental.** The V2 USB protocol (the `RMVT` start packet on USB interface 3) was
+> found by [DigiView](https://github.com/fpvout/DigiView-Android) (MIT) and [fpv.wtf](https://fpv.wtf/).
+> Never rely on it for flight safety. Not affiliated with DJI.
 
 ## Screen
 

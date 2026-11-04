@@ -137,7 +137,7 @@ public final class VideoPanel extends FrameLayout implements TextureView.Surface
             detail.setText("The goggles must be linked to the aircraft");
             connect.setVisibility(View.GONE);
         } else {
-            message.setText("Connect DJI Goggles N3 to this device with a USB-C cable");
+            message.setText("Connect DJI Goggles N3 or Goggles V2 to this device with a USB-C cable");
             String d = linkStatus.isEmpty() ? "" : "Status: " + linkStatus;
             if (!lastEnd.isEmpty()) d += (d.isEmpty() ? "" : "\n") + lastEnd;
             detail.setText(d);

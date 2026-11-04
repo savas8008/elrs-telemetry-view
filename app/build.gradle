@@ -10,8 +10,8 @@ android {
         applicationId 'com.elrstelemetri'
         minSdk 29
         targetSdk 35
-        versionCode 22
-        versionName '1.6'
+        versionCode 23
+        versionName '1.7'
     }
 
     // Release signing: the keystore comes from the CI secrets (never from the repository). Every

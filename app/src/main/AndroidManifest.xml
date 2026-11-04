@@ -18,6 +18,10 @@
     <uses-feature
         android:name="android.hardware.usb.accessory"
         android:required="false" />
+    <!-- Goggles V2 are a USB device: the phone is the USB host -->
+    <uses-feature
+        android:name="android.hardware.usb.host"
+        android:required="false" />
 
     <application
         android:icon="@mipmap/ic_launcher"
@@ -42,6 +46,13 @@
             <meta-data
                 android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED"
                 android:resource="@xml/accessory_filter" />
+            <!-- offer this app when DJI FPV Goggles V2 are plugged in (phone as USB host) -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/usb_device_filter" />
         </activity>
 
         <!-- keeps telemetry, alarms, logging and goggles video running in the background;

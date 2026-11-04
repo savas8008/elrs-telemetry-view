@@ -302,10 +302,10 @@ public class SettingsDialog {
 
     private void buildVideo(LinearLayout col) {
         LinearLayout card = card(col, "GOGGLES VIDEO (USB)");
-        hint(card, "Connect DJI Goggles N3 to this device with a USB-C data cable while the goggles are linked to "
-                + "the aircraft. When Android asks which app to open for the DJI accessory, choose ELRS Telemetry. "
-                + "Unofficial: based on the open-source DJI Unchained VOC project; may stop working after DJI "
-                + "firmware updates.");
+        hint(card, "Connect DJI Goggles N3 or Goggles V2 to this device with a USB-C data cable while the goggles "
+                + "are linked to the aircraft (Goggles V2: an OTG adapter may be needed). When Android asks which "
+                + "app to open, choose ELRS Telemetry and allow the USB access. Unofficial: based on the open-source "
+                + "DJI Unchained VOC (N3) and DigiView (V2) projects; may stop working after DJI firmware updates.");
         TextView usbState = label("Status: " + host.usbStatus());
         usbState.setTextColor(C_LABEL);
         usbState.setTextSize(12);
@@ -322,8 +322,9 @@ public class SettingsDialog {
                 "Next to the map while the goggles are connected"}, s.videoMode, false);
         hint(card, "The video opens by itself when the goggles connect; without goggles video the map fills the "
                 + "screen. Drag the bar between map and video to choose how much of the screen each one gets "
-                + "(remembered). The telemetry panel is hidden when the goggles connect; the telemetry button "
-                + "slides it in from the left.");
+                + "(remembered). With Goggles N3 the telemetry panel is hidden when the video starts (the N3 video "
+                + "shows the goggles' OSD); Goggles V2 video has no OSD, so the panel stays. The telemetry button "
+                + "slides it in and out from the left.");
 
         Switch keep = sw(card, "Keep running in the background", s.keepRunning);
         hint(card, "Keeps video, telemetry, spoken alarms and logging running while the screen is off or another "
