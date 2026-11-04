@@ -29,6 +29,7 @@ import com.elrstelemetri.goggles.GogglesLink;
 import com.elrstelemetri.goggles.GogglesLinks;
 import com.elrstelemetri.n3.H264AnnexBAssembler;
 import com.elrstelemetri.n3.N3UsbLink;
+import com.elrstelemetri.uvc.UvcLink;
 import com.elrstelemetri.v2.V2UsbLink;
 
 import org.osmdroid.tileprovider.cachemanager.CacheManager;
@@ -96,7 +97,9 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
     private String downloadStatus = "";
     private boolean downloading;
     private boolean started;
-    private GogglesLinks goggles;  // Goggles N3 (USB accessory) and Goggles V2 (USB device)
+    private GogglesLinks goggles;  // Goggles N3 (USB accessory), Goggles V2 and USB capture (USB devices)
+    private UvcLink uvc;
+    private static final int REQ_CAMERA = 2;
     private Intent launchIntent;
     private byte[] n3Sps, n3Pps;   // read thread only
     private View bVideo;
@@ -171,7 +174,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         });
         videoPanel = new VideoPanel(this);
         videoPanel.setCallback(this::connectGoggles);
-        // Video straight from DJI Goggles N3 or Goggles V2 over USB
+        // Video straight from DJI Goggles N3 / Goggles V2 or a USB (UVC) capture device
         GogglesLink.Listener videoListener = new GogglesLink.Listener() {
             @Override
             public void onStreamStarted() {
@@ -212,7 +215,13 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
                 });
             }
         };
-        goggles = new GogglesLinks(new N3UsbLink(this, videoListener), new V2UsbLink(this, videoListener));
+        uvc = new UvcLink(this, videoListener, videoPanel::useExternalVideo, () -> {
+            if (checkSelfPermission(android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED)
+                requestPermissions(new String[]{android.Manifest.permission.CAMERA}, REQ_CAMERA);
+        });
+        goggles = new GogglesLinks(new N3UsbLink(this, videoListener), new V2UsbLink(this, videoListener), uvc);
+        // a capture device draws straight into the video panel
+        videoPanel.setSurfaceListener(goggles::setVideoSurface);
         launchIntent = getIntent();
         videoWindow = new VideoWindow(this, videoPanel);
         videoWindow.setListener(() -> {
@@ -227,6 +236,18 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
             requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 1);
         }
         handleExit(getIntent());
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQ_CAMERA) return;
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            uvc.handleIntent(null);  // now open the capture device
+        } else {
+            Toast.makeText(this, "Without the camera permission Android does not allow USB capture devices",
+                    Toast.LENGTH_LONG).show();
+        }
     }
 
     @Override
@@ -417,7 +438,9 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
                             + "2. Connect the goggles to this device with a USB-C data cable "
                             + "(Goggles V2: an OTG adapter may be needed).\n"
                             + "3. When Android asks which app to open, choose ELRS Telemetry "
-                            + "and allow the USB access.")
+                            + "and allow the USB access.\n\n"
+                            + "Analog video: connect an AV-to-USB capture device fed by your video receiver "
+                            + "(Android also asks for the camera permission, required for USB video devices).")
                     .setPositiveButton("OK", null)
                     .show();
             return;

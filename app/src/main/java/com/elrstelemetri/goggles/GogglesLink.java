@@ -1,10 +1,14 @@
 package com.elrstelemetri.goggles;
 
 import android.content.Intent;
+import android.view.Surface;
 
 import com.elrstelemetri.n3.H264AnnexBAssembler;
 
-/** One kind of DJI goggles that delivers live H.264 video over USB (Goggles N3, Goggles V2). */
+/**
+ * One USB video source: DJI goggles that deliver H.264 (Goggles N3, Goggles V2), or a USB capture
+ * device that draws its video into the panel itself.
+ */
 public interface GogglesLink {
 
     interface Listener {
@@ -43,4 +47,11 @@ public interface GogglesLink {
 
     /** Short name for status texts, e.g. "Goggles N3". */
     String name();
+
+    /**
+     * The video panel's surface, or null when it goes away (then a link must stop drawing before it
+     * returns). Only links that draw the video themselves (USB capture) use it; the goggles send H.264.
+     */
+    default void setVideoSurface(Surface surface) {
+    }
 }

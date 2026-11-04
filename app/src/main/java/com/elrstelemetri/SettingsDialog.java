@@ -305,7 +305,9 @@ public class SettingsDialog {
         hint(card, "Connect DJI Goggles N3 or Goggles V2 to this device with a USB-C data cable while the goggles "
                 + "are linked to the aircraft (Goggles V2: an OTG adapter may be needed). When Android asks which "
                 + "app to open, choose ELRS Telemetry and allow the USB access. Unofficial: based on the open-source "
-                + "DJI Unchained VOC (N3) and DigiView (V2) projects; may stop working after DJI firmware updates.");
+                + "DJI Unchained VOC (N3) and DigiView (V2) projects; may stop working after DJI firmware updates.\n"
+                + "Analog video: connect an AV-to-USB (UVC) capture device fed by your video receiver. Android asks "
+                + "for the camera permission once: it is required for USB video devices.");
         TextView usbState = label("Status: " + host.usbStatus());
         usbState.setTextColor(C_LABEL);
         usbState.setTextSize(12);

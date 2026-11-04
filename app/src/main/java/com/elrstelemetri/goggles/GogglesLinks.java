@@ -83,6 +83,11 @@ public final class GogglesLinks implements GogglesLink {
     }
 
     @Override
+    public void setVideoSurface(android.view.Surface surface) {
+        for (GogglesLink l : links) l.setVideoSurface(surface);
+    }
+
+    @Override
     public String name() {
         GogglesLink a = active();
         return a != null ? a.name() : "Goggles";
