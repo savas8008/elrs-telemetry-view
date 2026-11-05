@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -13,10 +14,25 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Android grants USB access to a video class device (USB capture) only with the camera permission -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- added by the UVC library, not used by this app -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" />
 
     <!-- Goggles N3 connect as an Android USB accessory -->
     <uses-feature
         android:name="android.hardware.usb.accessory"
+        android:required="false" />
+    <!-- the camera permission must not hide the app from devices without a camera -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <!-- Goggles V2 and USB capture devices are USB devices: the phone is the USB host -->
+    <uses-feature
+        android:name="android.hardware.usb.host"
         android:required="false" />
 
     <application
@@ -42,6 +58,13 @@
             <meta-data
                 android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED"
                 android:resource="@xml/accessory_filter" />
+            <!-- offer this app when DJI FPV Goggles V2 or a USB capture device are plugged in (phone as USB host) -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/usb_device_filter" />
         </activity>
 
         <!-- keeps telemetry, alarms, logging and goggles video running in the background;

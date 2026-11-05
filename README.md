@@ -36,7 +36,10 @@ radio's telemetry **on a map**. No MAVLink needed: it reads the CRSF telemetry t
 - **Configurable alarms** with on-screen banner, voice and vibration (see [Alarms](#alarms))
 - **Live goggles video straight from DJI Goggles N3 over USB** — no DJI Fly needed — side by side with the
   map at the ratio you choose, never overlapping; without goggles video the map fills the screen
-  (see [Goggles video](#goggles-video-dji-goggles-n3-over-usb))
+  (see [Goggles video](#goggles-video-dji-goggles-n3-over-usb)); **DJI FPV Goggles V2** work too
+  (see [Goggles V2](#goggles-video-dji-fpv-goggles-v2-over-usb))
+- **Analog video** through an AV-to-USB capture device connected to your video receiver, shown the same
+  way next to the map (see [Analog video](#analog-video-usb-capture-device))
 - **Flight log (CSV)**: on by default, starts automatically when telemetry arrives
 - **Flight summary**: duration, max altitude, max distance, max speed/current, min cell voltage
 - Landscape, full screen, screen stays on
@@ -134,6 +137,53 @@ USB for video.
 > Confirmed working with Goggles N3 + O4 Air Unit Lite; the original project tested N3 + O4 Air Unit Pro /
 > Avata 2. A DJI firmware update may change the protocol. Never rely on it for flight safety.
 > Not affiliated with DJI.
+
+## Goggles video (DJI FPV Goggles V2 over USB)
+
+**DJI FPV Goggles V2** (and V1) also send their live video over USB. No extra wtfos package on the
+goggles is needed for the video.
+
+1. Turn on the goggles and link them to the aircraft (live view on the goggles).
+2. Connect the goggles' USB-C port to this phone/tablet. Here the phone is the USB **host**: use a
+   USB-C data cable, or an **OTG adapter** if a plain USB-C to USB-C cable is not detected. On some phones
+   OTG must be switched on in Android's settings first.
+3. When Android asks which app to open for the USB device, choose **ELRS Telemetry**, then **allow** the
+   USB access (tick "always" to skip both next time).
+4. The video opens next to the map, exactly as with the N3. The goggles button, the ✕ and the divider
+   work the same.
+
+Differences to the N3:
+- **No OSD in the phone video.** The goggles send the air unit's video as it is; their OSD (stock or
+  MSP-OSD) is drawn on the goggles' screen only. That is why the **telemetry panel stays visible** when
+  the V2 video starts.
+- If the video stops, the app sends the goggles' start packet again after 3 s and reopens the USB
+  connection after 8 s. DigiView users report the most stable stream in the goggles' 50 Mbps mode.
+
+> [!WARNING]
+> **Unofficial and experimental.** The V2 USB protocol (the `RMVT` start packet on USB interface 3) was
+> found by [DigiView](https://github.com/fpvout/DigiView-Android) (MIT) and [fpv.wtf](https://fpv.wtf/).
+> Never rely on it for flight safety. Not affiliated with DJI.
+
+## Analog video (USB capture device)
+
+Analog FPV video can be shown through an **AV-to-USB capture device**: a small USB video (UVC) dongle
+connected to the AV output of your video receiver or analog goggles.
+
+1. Connect the receiver's AV output to the capture device, and the capture device to this phone/tablet
+   (directly or through an **OTG adapter**). As with the Goggles V2, the phone is the USB **host**.
+2. When Android asks which app to open for the USB device, choose **ELRS Telemetry**.
+3. The first time, Android asks for the **camera permission**. Android requires it for every USB video
+   device; the app does not use the phone's own cameras. Then **allow** the USB access.
+4. The video opens next to the map, as with the goggles. The goggles button, the ✕ and the divider
+   work the same.
+
+Notes:
+- The app picks the largest picture the device offers, up to 1080p. Analog video is shown at 4:3.
+- The telemetry panel stays visible when the video starts; the **telemetry** button slides it out.
+- If the video stops, check the cables and the receiver, then press **Connect** in
+  ⚙ **Settings → Goggles video**.
+- Tested with a generic USB 2.0 capture device (640×480 at 25 fps). Devices that need their own
+  driver or app are not UVC devices and do not work.
 
 ## Screen
 
@@ -234,6 +284,18 @@ Builds before v1.0 were signed with temporary keys: uninstall such a build once 
 | No position | Is GPS enabled on the aircraft with GPS telemetry, with enough satellites? |
 | No voice | Install/enable an English voice in Android's text-to-speech settings. |
 | No goggles video | Goggles linked to the aircraft? Data cable (not charge-only)? Choose ELRS Telemetry when Android asks; check ⚙ Settings → Goggles video → Status, then **Connect**. Close DJI Fly so it does not hold the USB connection. |
+| No video from a capture device | Is it a UVC device (works on a computer without installing anything)? Camera permission allowed (Android Settings › Apps › ELRS Telemetry › Permissions)? Check ⚙ Settings → Goggles video → Status, then **Connect**. |
+
+### Video connection log
+
+If the Goggles V2 or capture device video does not start, a log helps when you report the problem.
+The app writes short connection messages (device name, connection steps, errors) to Android's
+system log. They stay on your device; the app does not send them anywhere.
+
+To add them to a problem report: ⚙ **Settings → Goggles video → Copy video log**, then paste the text
+into your report or message. It starts with the app version, Android version and phone model, and you
+can read it before sending. With USB debugging on, `adb logcat -s V2Usb Uvc` shows the same messages
+on a computer.
 
 ### WiFi keeps dropping
 
@@ -291,6 +353,9 @@ The top bar shows `drops N/M` once something happens: **N** = times the WiFi its
 | `VideoPanel.java` | MediaCodec decoding of the goggles video onto a TextureView; Connect overlay |
 | `VideoWindow.java` | Floating video window: drag to move, corner handle to resize, FULL/✕ buttons |
 | `n3/*.java` | Goggles N3 USB video: logiclink decoder, H.264 access-unit assembler, subscription packets, USB accessory session (adapted from DJI Unchained VOC, Apache-2.0) |
+| `goggles/*.java` | One interface for every USB video source; status and controls go to the one that is streaming or plugged in; "Copy video log" |
+| `v2/V2UsbLink.java` | Goggles V2 USB video: USB permission, `RMVT` start packet, read thread, stall watchdog |
+| `uvc/UvcLink.java` | USB capture devices (UVC) through the UVCAndroid library: permissions, video mode choice, drawing into the video panel |
 | `TelemetryService.java` | Foreground service that keeps the app running while another app is in front |
 | `SettingsDialog.java` | Settings screen |
 | `MainActivity.java` | UDP receiver and GCS screen |
@@ -302,6 +367,10 @@ The top bar shows `drops N/M` once something happens: **N** = times the WiFi its
   [DJI Unchained VOC](https://github.com/jtm2kfpv-git/DJI-Unchained-VOC), Copyright 2026 JTM2k FPV,
   Apache License 2.0 — see [NOTICE](NOTICE) and [LICENSE-APACHE-2.0.txt](LICENSE-APACHE-2.0.txt).
 - [osmdroid](https://github.com/osmdroid/osmdroid), Apache License 2.0.
+- [UVCAndroid](https://github.com/shiyinghan/UVCAndroid) (USB capture devices, includes libuvc and
+  libusb), Apache License 2.0.
+- The Goggles V2 USB protocol follows [DigiView-Android](https://github.com/fpvout/DigiView-Android) (MIT)
+  and [fpv.wtf](https://fpv.wtf/); no code is copied — see [NOTICE](NOTICE).
 
 ## Map data
 

@@ -25,8 +25,13 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.elrstelemetri.goggles.GogglesLink;
+import com.elrstelemetri.goggles.GogglesLinks;
+import com.elrstelemetri.goggles.VideoLog;
 import com.elrstelemetri.n3.H264AnnexBAssembler;
 import com.elrstelemetri.n3.N3UsbLink;
+import com.elrstelemetri.uvc.UvcLink;
+import com.elrstelemetri.v2.V2UsbLink;
 
 import org.osmdroid.tileprovider.cachemanager.CacheManager;
 import org.osmdroid.util.BoundingBox;
@@ -93,7 +98,9 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
     private String downloadStatus = "";
     private boolean downloading;
     private boolean started;
-    private N3UsbLink n3;
+    private GogglesLinks goggles;  // Goggles N3 (USB accessory), Goggles V2 and USB capture (USB devices)
+    private UvcLink uvc;
+    private static final int REQ_CAMERA = 2;
     private Intent launchIntent;
     private byte[] n3Sps, n3Pps;   // read thread only
     private View bVideo;
@@ -168,13 +175,14 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         });
         videoPanel = new VideoPanel(this);
         videoPanel.setCallback(this::connectGoggles);
-        // Video straight from DJI Goggles N3 over USB
-        n3 = new N3UsbLink(this, new N3UsbLink.Listener() {
+        // Video straight from DJI Goggles N3 / Goggles V2 or a USB (UVC) capture device
+        GogglesLink.Listener videoListener = new GogglesLink.Listener() {
             @Override
             public void onStreamStarted() {
                 videoPanel.onConnected();
-                // the goggles' OSD shows the telemetry: give the screen to the map and the video
-                if (settings.showPanels) {
+                // the goggles' OSD in the video shows the telemetry: give the screen to the map and the video.
+                // Goggles V2 send the video without their OSD, so the telemetry panel stays.
+                if (settings.showPanels && goggles.videoHasOsd()) {
                     settings.showPanels = false;
                     settings.save(prefs);
                     applyPanelVisibility(true);
@@ -183,7 +191,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
                 // Not if the user closed the video: it stays closed (map 100 %) until they open it again.
                 if (settings.videoMode == Settings.VIDEO_OFF && !videoClosedByUser) setVideoMode(Settings.VIDEO_ON);
                 else applyVideoMode();
-                Toast.makeText(MainActivity.this, "Goggles video connected", Toast.LENGTH_SHORT).show();
+                Toast.makeText(MainActivity.this, goggles.name() + " video connected", Toast.LENGTH_SHORT).show();
             }
 
             @Override
@@ -207,7 +215,14 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
                     Toast.makeText(MainActivity.this, "Goggles video ended: " + reason, Toast.LENGTH_SHORT).show();
                 });
             }
+        };
+        uvc = new UvcLink(this, videoListener, videoPanel::useExternalVideo, () -> {
+            if (checkSelfPermission(android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED)
+                requestPermissions(new String[]{android.Manifest.permission.CAMERA}, REQ_CAMERA);
         });
+        goggles = new GogglesLinks(new N3UsbLink(this, videoListener), new V2UsbLink(this, videoListener), uvc);
+        // a capture device draws straight into the video panel
+        videoPanel.setSurfaceListener(goggles::setVideoSurface);
         launchIntent = getIntent();
         videoWindow = new VideoWindow(this, videoPanel);
         videoWindow.setListener(() -> {
@@ -225,10 +240,22 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
     }
 
     @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQ_CAMERA) return;
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            uvc.handleIntent(null);  // now open the capture device
+        } else {
+            Toast.makeText(this, "Without the camera permission Android does not allow USB capture devices",
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         handleExit(intent);
-        n3.handleIntent(intent);  // goggles plugged in while the app runs
+        goggles.handleIntent(intent);  // goggles plugged in while the app runs
     }
 
     /** "Exit" from the notification: stop everything and close. */
@@ -311,7 +338,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         wifiLock.acquire();
         router.start();
         startReceiver();
-        n3.start(launchIntent);
+        goggles.start(launchIntent);
         ui.post(tick);
         ui.post(logTick);
     }
@@ -322,7 +349,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
         ui.removeCallbacks(tick);
         ui.removeCallbacks(logTick);
         stopReceiver();
-        n3.stop();
+        goggles.stop();
         router.stop();
         logger.close();
         if (mcLock != null && mcLock.isHeld()) mcLock.release();
@@ -404,18 +431,22 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
 
     /** Connect button / goggles panel: (re)connect the goggles or explain how to plug them in. */
     private void connectGoggles() {
-        if (!n3.accessoryPresent()) {
+        if (!goggles.devicePresent()) {
             new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                     .setTitle("Connect the goggles")
                     .setMessage("No DJI goggles found on USB.\n\n"
-                            + "1. Turn on DJI Goggles N3 and link them to the aircraft.\n"
-                            + "2. Connect the goggles to this device with a USB-C data cable.\n"
-                            + "3. When Android asks which app to open, choose ELRS Telemetry.")
+                            + "1. Turn on DJI Goggles N3 or Goggles V2 and link them to the aircraft.\n"
+                            + "2. Connect the goggles to this device with a USB-C data cable "
+                            + "(Goggles V2: an OTG adapter may be needed).\n"
+                            + "3. When Android asks which app to open, choose ELRS Telemetry "
+                            + "and allow the USB access.\n\n"
+                            + "Analog video: connect an AV-to-USB capture device fed by your video receiver "
+                            + "(Android also asks for the camera permission, required for USB video devices).")
                     .setPositiveButton("OK", null)
                     .show();
             return;
         }
-        n3.reconnect();
+        goggles.reconnect();
         Toast.makeText(this, "Connecting to the goggles…", Toast.LENGTH_SHORT).show();
     }
 
@@ -430,7 +461,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
 
     /** Video next to the map: switched on, GCS on screen and the goggles streaming. Otherwise the map fills the screen. */
     private boolean videoShown() {
-        return settings.videoMode != Settings.VIDEO_OFF && gcsShown() && (n3.isStreaming() || videoLinkForScreenshots);
+        return settings.videoMode != Settings.VIDEO_OFF && gcsShown() && (goggles.isStreaming() || videoLinkForScreenshots);
     }
 
     private void applyVideoMode() {
@@ -696,7 +727,7 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
             }
         }
 
-        videoPanel.setLinkStatus(n3.status());
+        videoPanel.setLinkStatus(goggles.status());
         videoPanel.refresh(now);
         if (videoPanel.isStalled()) notices.add("No video from the goggles — check the goggles' link to the aircraft");
 
@@ -942,12 +973,17 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
 
     @Override
     public String usbStatus() {
-        return n3.status() + (n3.identity().isEmpty() ? "" : "\n" + n3.identity());
+        return goggles.status() + (goggles.identity().isEmpty() ? "" : "\n" + goggles.identity());
     }
 
     @Override
     public void usbReconnect() {
         connectGoggles();
+    }
+
+    @Override
+    public void copyVideoLog() {
+        VideoLog.copy(this, appVersion(), usbStatus());
     }
 
     @Override
@@ -1303,11 +1339,11 @@ public class MainActivity extends Activity implements SettingsDialog.Host, Offli
             boolean on = settings.videoMode == Settings.VIDEO_OFF;
             videoClosedByUser = !on;
             setVideoMode(on ? Settings.VIDEO_ON : Settings.VIDEO_OFF);
-            if (on && !n3.isStreaming()) {
-                Toast.makeText(this, n3.accessoryPresent() ? "Connecting to the goggles…"
+            if (on && !goggles.isStreaming()) {
+                Toast.makeText(this, goggles.devicePresent() ? "Connecting to the goggles…"
                         : "Connect the goggles with a USB-C cable — the video opens next to the map",
                         Toast.LENGTH_LONG).show();
-                if (n3.accessoryPresent()) n3.reconnect();
+                if (goggles.devicePresent()) goggles.reconnect();
             }
         });
         // telemetry panel: slides in from the left / back out

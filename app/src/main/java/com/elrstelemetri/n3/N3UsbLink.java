@@ -19,6 +19,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 
+import com.elrstelemetri.goggles.GogglesLink;
+
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -28,18 +30,7 @@ import java.util.Locale;
  * Live video straight from DJI Goggles N3 over USB, without DJI Fly. The goggles appear as an
  * Android USB accessory; after the subscription packets they send H.264 on logiclink port 0x574A.
  */
-public final class N3UsbLink {
-
-    public interface Listener {
-        /** Video started (first data on a new connection). */
-        void onStreamStarted();
-
-        /** One H.264 access unit (Annex-B) with the latest SPS/PPS. */
-        void onAccessUnit(H264AnnexBAssembler.AccessUnit au);
-
-        /** Connection lost or closed. */
-        void onStreamStopped(String reason);
-    }
+public final class N3UsbLink implements GogglesLink {
 
     private static final long RETRY_MS = 2000;
     private static final long STALL_KEEPALIVE_MS = 3000;
@@ -97,7 +88,7 @@ public final class N3UsbLink {
         }
     };
 
-    /** Starts listening; {@code launchIntent} may carry the accessory if the app was opened by plugging in. */
+    @Override
     public void start(Intent launchIntent) {
         if (enabled) return;
         enabled = true;
@@ -112,6 +103,7 @@ public final class N3UsbLink {
         main.post(tick);
     }
 
+    @Override
     public void stop() {
         enabled = false;
         main.removeCallbacks(tick);
@@ -126,34 +118,49 @@ public final class N3UsbLink {
         status = "off";
     }
 
-    /** Handles an ACTION_USB_ACCESSORY_ATTACHED intent delivered to the activity. */
+    @Override
     public void handleIntent(Intent intent) {
         UsbAccessory a = accessoryExtra(intent);
         if (a != null && enabled) connect(a);
     }
 
-    /** Closes and reopens the USB connection. */
+    @Override
     public void reconnect() {
         closeTransport("reconnecting");
         connect(firstDjiAccessory());
     }
 
+    @Override
     public String status() {
         return status;
     }
 
+    @Override
     public String identity() {
         return identity;
     }
 
     /** True if a DJI USB accessory (the goggles) is currently attached. */
-    public boolean accessoryPresent() {
+    @Override
+    public boolean devicePresent() {
         UsbAccessory a = firstDjiAccessory();
         return a != null && isDji(a);
     }
 
+    @Override
     public boolean isStreaming() {
         return streaming;
+    }
+
+    /** The N3 mobile stream is the goggles' finished picture, OSD included. */
+    @Override
+    public boolean videoHasOsd() {
+        return true;
+    }
+
+    @Override
+    public String name() {
+        return "Goggles N3";
     }
 
     // ---------------------------------------------------------------- Connection

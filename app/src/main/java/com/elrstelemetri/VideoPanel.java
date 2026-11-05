@@ -55,6 +55,10 @@ public final class VideoPanel extends FrameLayout implements TextureView.Surface
     private volatile boolean connected;
     private volatile String lastEnd = "";
     private String linkStatus = "";
+    /** A USB capture device draws into the surface itself (no H.264 decoding here). */
+    private volatile boolean external;
+    private volatile String externalFormat = "";
+    private java.util.function.Consumer<Surface> surfaceListener;
 
     public VideoPanel(Context c) {
         super(c);
@@ -116,6 +120,32 @@ public final class VideoPanel extends FrameLayout implements TextureView.Surface
         callback = cb;
     }
 
+    /**
+     * Told about the drawing surface: when it becomes available, and with null before it goes away
+     * (the listener must stop drawing into it before it returns). Called on the main thread.
+     */
+    public void setSurfaceListener(java.util.function.Consumer<Surface> l) {
+        surfaceListener = l;
+        if (l != null && surface != null) l.accept(surface);
+    }
+
+    /**
+     * A USB capture device is about to draw into the surface: stop the H.264 decoder (a surface
+     * takes one producer at a time) and letterbox to the given display size. Main thread.
+     */
+    public void useExternalVideo(String format, int displayW, int displayH) {
+        synchronized (lock) {
+            releaseDecoder();
+            sps = null;
+            pps = null;
+        }
+        external = true;
+        externalFormat = format;
+        videoW = displayW;
+        videoH = displayH;
+        updateTransform();
+    }
+
     /** USB link status shown while no video arrives. */
     public void setLinkStatus(String s) {
         linkStatus = s;
@@ -129,15 +159,17 @@ public final class VideoPanel extends FrameLayout implements TextureView.Surface
         }
         overlay.setVisibility(View.VISIBLE);
         if (connected && hadVideo) {
-            message.setText("No video from the goggles for " + ((now - lastDataTime) / 1000) + " s");
-            detail.setText("Check the goggles' link to the aircraft — recovering automatically");
+            message.setText("No video from the " + (external ? "capture device" : "goggles") + " for "
+                    + ((now - lastDataTime) / 1000) + " s");
+            detail.setText(external ? "Check the USB cable and the capture device"
+                    : "Check the goggles' link to the aircraft — recovering automatically");
             connect.setVisibility(View.GONE);
         } else if (connected) {
-            message.setText("Goggles connected — waiting for video");
-            detail.setText("The goggles must be linked to the aircraft");
+            message.setText(external ? "Capture device connected — waiting for video" : "Goggles connected — waiting for video");
+            detail.setText(external ? "Starting the video" : "The goggles must be linked to the aircraft");
             connect.setVisibility(View.GONE);
         } else {
-            message.setText("Connect DJI Goggles N3 to this device with a USB-C cable");
+            message.setText("Connect DJI Goggles N3 or Goggles V2 to this device with a USB-C cable (or an AV-to-USB capture device)");
             String d = linkStatus.isEmpty() ? "" : "Status: " + linkStatus;
             if (!lastEnd.isEmpty()) d += (d.isEmpty() ? "" : "\n") + lastEnd;
             detail.setText(d);
@@ -155,7 +187,8 @@ public final class VideoPanel extends FrameLayout implements TextureView.Surface
     }
 
     public String describe() {
-        return isLive() ? String.format(Locale.US, "H.264 %dx%d", videoW, videoH) : connected ? "connected, no video" : "not connected";
+        if (!isLive()) return connected ? "connected, no video" : "not connected";
+        return external ? externalFormat : String.format(Locale.US, "H.264 %dx%d", videoW, videoH);
     }
 
     // ---------------------------------------------------------------- Video input (USB read thread)
@@ -212,6 +245,7 @@ public final class VideoPanel extends FrameLayout implements TextureView.Surface
     public void onDisconnected(String reason) {
         connected = false;
         hadVideo = false;
+        external = false;
         lastEnd = "Last video ended " + new java.text.SimpleDateFormat("HH:mm:ss", Locale.US).format(new java.util.Date())
                 + " (" + reason + ")";
     }
@@ -309,8 +343,9 @@ public final class VideoPanel extends FrameLayout implements TextureView.Surface
     public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
         synchronized (lock) {
             surface = new Surface(st);
-            restartDecoder();
+            if (!external) restartDecoder();
         }
+        if (surfaceListener != null) surfaceListener.accept(surface);
     }
 
     @Override
@@ -320,6 +355,7 @@ public final class VideoPanel extends FrameLayout implements TextureView.Surface
 
     @Override
     public boolean onSurfaceTextureDestroyed(SurfaceTexture st) {
+        if (surfaceListener != null) surfaceListener.accept(null);  // a capture device stops drawing first
         synchronized (lock) {
             releaseDecoder();
             if (surface != null) surface.release();
@@ -330,6 +366,11 @@ public final class VideoPanel extends FrameLayout implements TextureView.Surface
 
     @Override
     public void onSurfaceTextureUpdated(SurfaceTexture st) {
+        if (!external) return;  // H.264 frames are counted by the decoder
+        long now = System.currentTimeMillis();
+        lastFrameTime = now;
+        lastDataTime = now;
+        hadVideo = true;
     }
 
     public void release() {

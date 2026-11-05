@@ -9,6 +9,16 @@ Earlier test builds were signed with a temporary key. **Uninstall the old app on
 this version (Android shows "App not installed" otherwise). From this version on, new releases
 install as normal updates and keep your settings.
 
+### New in 1.7
+- **DJI FPV Goggles V2 video over USB** (experimental): plug the goggles in (OTG adapter if needed),
+  choose ELRS Telemetry and allow the USB access; the video opens next to the map like the N3 video.
+  The V2 video has no OSD, so the telemetry panel stays visible. Protocol found by DigiView / fpv.wtf.
+- **Analog video from an AV-to-USB capture device**: connect it to your video receiver and the phone,
+  choose ELRS Telemetry and allow the camera permission (Android requires it for USB video devices)
+  and the USB access; the video opens next to the map.
+- **Copy video log** in Settings → Goggles video: copies the Goggles V2 and capture device connection
+  messages, to paste into a problem report.
+
 ### New in 1.6
 - Follow mode is switched only with the follow button. Moving or zooming the map no longer turns it
   off; it is on when the app starts.

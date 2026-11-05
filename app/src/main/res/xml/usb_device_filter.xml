@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- DJI FPV Goggles V1/V2: VID 0x2CA3, PID 0x001F (decimal values required here) -->
+    <usb-device vendor-id="11427" product-id="31" />
+    <!-- USB video class (UVC) devices, e.g. AV-to-USB capture dongles: class 14 -->
+    <usb-device class="14" />
+</resources>
